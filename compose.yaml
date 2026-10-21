@@ -1,0 +1,12 @@
+services:
+  simple-editor:
+    build: .
+    image: simple-editor:latest
+    restart: unless-stopped
+    environment:
+      # Generate with: openssl rand -hex 32
+      AUTH_TOKEN: ${AUTH_TOKEN:?set AUTH_TOKEN in .env}
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8080:8080"

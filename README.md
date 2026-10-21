@@ -1,32 +1,44 @@
 # Simple Editor
 
-Simplenote の代わりに使える、自宅サーバーで動かすプレーンテキストのメモアプリです。
+English | [日本語](README.ja.md)
 
-- **タグ** — ノートに複数のタグを付け、タグで絞り込めます
-- **複数端末から安全に同時編集** — [Yjs](https://yjs.dev/)（CRDT）で編集を同期します。同じノートを複数の端末で同時に編集しても、オフライン中に編集しても、変更が失われずにマージされます
-- **作成日の保持** — 作成日時はノートに記録され、サーバー側でも最初に保存された値を上書きしません
-- **全文検索** — 本文とタグを対象に検索できます。空白で区切った語はすべて含むノートに絞り込み（AND）、大文字・小文字は区別しません。日本語も単語分割なしで部分一致します
-- **テキスト書き出し** — 1件ずつ `.txt` で、または全件を `.zip`（各ノートの `.txt` と、タグや日付を収めた `notes.json`）で書き出せます
-- **オフライン対応** — ノートは端末の IndexedDB にも保存され、再接続時に自動で同期します
+> This is a translation of [README.ja.md](README.ja.md). The Japanese version is authoritative.
 
-## 構成
+## Introduction
+
+Simple Editor is a plain-text notes app you host yourself, written as a replacement for Simplenote.
+
+It runs as one Docker container on a home server and stores everything in a single SQLite file. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects.
+
+See [SPEC.md](SPEC.md) for the full specification and design principles, and [CHANGELOG.md](CHANGELOG.md) for the history of changes.
+
+## Features
+
+- **Tags** — add several tags to a note and filter the list by tag
+- **Safe concurrent editing from several devices** — edits sync through Yjs. Whether you edit the same note on several devices at once or while offline, changes are merged without losing any of them
+- **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored
+- **Full-text search** — search note bodies and tags. Whitespace-separated terms must all match (AND), case is ignored, and Japanese matches by substring without word segmentation
+- **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note plus `notes.json` with tags and dates)
+- **Works offline** — notes are also stored in the device's IndexedDB and sync automatically on reconnect
+
+## Layout
 
 ```
-server/   Node.js + Hocuspocus（Yjs の同期サーバー）+ SQLite。Web クライアントも配信する
-client/   Web クライアント（TypeScript + CodeMirror 6）。PWA としてインストールできる
+server/   Node.js + Hocuspocus (Yjs sync server) + SQLite. Also serves the web client
+client/   Web client (TypeScript + CodeMirror 6), installable as a PWA
 ```
 
-クライアントは 1 つの PWA で、各プラットフォームでは次のようにインストールします。
+The client is a single PWA. Install it on each platform as follows.
 
-| プラットフォーム | インストール方法 |
+| Platform | How to install |
 | --- | --- |
-| macOS（Apple Silicon / Intel） | Safari でサーバーの URL を開き「ファイル → Dock に追加」、または Chrome の「アプリをインストール」 |
-| iPhone | Safari で開き「共有 → ホーム画面に追加」 |
-| Android | Chrome で開き「アプリをインストール」 |
+| macOS (Apple Silicon / Intel) | Open the server URL in Safari and choose File → Add to Dock, or use "Install app" in Chrome |
+| iPhone | Open it in Safari and choose Share → Add to Home Screen |
+| Android | Open it in Chrome and choose "Install app" |
 
-> PWA のインストールとオフライン動作には **HTTPS** が必要です（後述）。
+> Installing the PWA and using it offline require **HTTPS** (see below).
 
-## サーバーの起動（Ubuntu + Docker）
+## Running the server (Ubuntu + Docker)
 
 ```sh
 git clone https://github.com/oikawas/simple-editor.git
@@ -35,22 +47,22 @@ echo "AUTH_TOKEN=$(openssl rand -hex 32)" > .env
 docker compose up -d --build
 ```
 
-- データは `./data/notes.db`（SQLite）に保存されます。バックアップはこのファイルをコピーしてください
-- 初期設定ではホストの `127.0.0.1:8080` のみで待ち受けます。端末からは下記の HTTPS 経由で接続してください
-- 初回アクセス時に設定画面が開くので、`.env` の `AUTH_TOKEN` を入力します
+- Data is stored in `./data/notes.db` (SQLite). To back up, copy this file
+- By default the server listens on the host's `127.0.0.1:8080` only. Connect from your devices over HTTPS as described below
+- The settings dialog opens on first visit; enter the `AUTH_TOKEN` from `.env`
 
-### HTTPS で公開する
+### Serving over HTTPS
 
-どちらか一方で十分です。
+Either one is enough.
 
-**Tailscale（おすすめ・ポート開放不要）** — サーバーと各端末を同じ tailnet に入れ、サーバーで次を実行します。
+**Tailscale (recommended, no port forwarding)** — put the server and your devices on the same tailnet and run this on the server:
 
 ```sh
 sudo tailscale serve --bg 8080
-# → https://<マシン名>.<tailnet>.ts.net で全端末からアクセスできる
+# → reachable from every device at https://<machine-name>.<tailnet>.ts.net
 ```
 
-**Caddy などのリバースプロキシ** — 独自ドメインで公開する場合の例です。WebSocket（`/sync`）もそのまま転送されます。
+**A reverse proxy such as Caddy** — an example for your own domain. WebSocket traffic (`/sync`) is forwarded as is.
 
 ```
 notes.example.com {
@@ -58,54 +70,46 @@ notes.example.com {
 }
 ```
 
-### 環境変数
+### Environment variables
 
-| 名前 | 既定値 | 説明 |
+| Name | Default | Description |
 | --- | --- | --- |
-| `AUTH_TOKEN` | （必須） | クライアントが使う共有トークン。16 文字以上 |
-| `PORT` | `8080` | 待ち受けポート |
-| `DATA_DIR` | `/data` | SQLite の保存先 |
-| `STATIC_DIR` | `/app/client/dist` | 配信する Web クライアント |
+| `AUTH_TOKEN` | (required) | Shared token used by clients. At least 16 characters |
+| `PORT` | `8080` | Port to listen on |
+| `DATA_DIR` | `/data` | Where the SQLite database is stored |
+| `STATIC_DIR` | `/app/client/dist` | Web client to serve |
 
 ## API
 
-`Authorization: Bearer <AUTH_TOKEN>` が必要です（`/api/health` を除く）。
+`Authorization: Bearer <AUTH_TOKEN>` is required (except for `/api/health`).
 
-| パス | 内容 |
+| Path | Description |
 | --- | --- |
-| `GET /api/health` | 死活確認 |
-| `GET /api/notes` | ノート一覧（タイトル、タグ、作成日、更新日、ゴミ箱フラグ） |
-| `GET /api/search?q=...` | 全文検索。一致したノートの ID と抜粋を更新日の新しい順に返す |
-| `GET /api/notes/:id.txt` | 1 件をテキストで取得 |
-| `GET /api/export.zip` | 全件を zip で取得（`?trash=1` でゴミ箱も含める） |
-| `WS /sync` | Yjs の同期（Hocuspocus プロトコル） |
+| `GET /api/health` | Health check |
+| `GET /api/notes` | Note list (title, tags, creation date, update date, trash flag) |
+| `GET /api/search?q=...` | Full-text search. Returns IDs and excerpts of matching notes, newest first |
+| `GET /api/notes/:id.txt` | One note as text |
+| `GET /api/export.zip` | All notes as a zip (`?trash=1` includes the trash) |
+| `WS /sync` | Yjs sync (Hocuspocus protocol) |
 
-## 開発
+## Development
 
 ```sh
 npm install
 AUTH_TOKEN=dev-token-0123456789 npm run dev:server   # :8080
-npm run dev:client                                   # :5173（/api と /sync を :8080 へ転送）
-npm test                                             # サーバーの統合テスト
+npm run dev:client                                   # :5173 (forwards /api and /sync to :8080)
+npm test                                             # server integration tests
 ```
 
-### データモデル
+See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
-ノート 1 件が 1 つの Yjs ドキュメント（名前 `note:<uuid>`）です。
+## Possible next steps
 
-- `getText("body")` — 本文。1 行目がタイトルになります
-- `getMap("meta")` — `createdAt`、`updatedAt`（ミリ秒）、`deleted`
-- `getMap("tags")` — タグ名 → `true`。Map にしているのは、別々の端末で同時にタグを追加・削除してもきれいにマージされるためです
+- Native apps (wrapping the PWA with Tauri / Capacitor)
+- Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
+- Browsing and restoring history, emptying the trash
+- Importing from Simplenote
 
-サーバーはドキュメントを保存するたびに、一覧用の要約を SQLite の `notes` テーブルに、本文とタグを全文検索用の `notes_fts`（FTS5、trigram トークナイザ）に書き、空のドキュメント `__index` を購読しているクライアントへ変更を通知します。
-
-## 今後の候補
-
-- ネイティブアプリ化（PWA を Tauri / Capacitor で包む）
-- オフライン時の全文検索（現状、オフライン中に本文まで検索できるのは開いているノートだけで、他はタイトル・冒頭・タグが対象）
-- 履歴の閲覧と復元、ゴミ箱を空にする操作
-- Simplenote からのインポート
-
-## ライセンス
+## License
 
 [MIT](LICENSE)

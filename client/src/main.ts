@@ -57,47 +57,114 @@ async function refreshList(): Promise<void> {
     if (current) next.set(current.note.id, summarize(current.note.id, current.note.doc));
     notes = next;
     saveCache();
-    renderList();
+    if (searchQuery()) void runSearch();
+    else renderList();
   } catch {
     // Offline: keep showing the cached list.
   }
 }
 
+// ---- search ----------------------------------------------------------------
+
+// Full-text hits from the server for `query` (note id -> excerpt). Null when the
+// server could not be reached; the list then falls back to local matching.
+let searchResults: { query: string; hits: Map<string, string> } | null = null;
+let searchTimer: number | undefined;
+
+function searchQuery(): string {
+  return $<HTMLInputElement>("search").value.trim();
+}
+
+function searchTerms(): string[] {
+  return searchQuery().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function scheduleSearch(): void {
+  clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(runSearch, 200);
+}
+
+async function runSearch(): Promise<void> {
+  const query = searchQuery();
+  if (!query || !settings.token) {
+    searchResults = null;
+    return renderList();
+  }
+  try {
+    const res = await fetch(`${settings.serverUrl}/api/search?q=${encodeURIComponent(query)}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const hits: { id: string; snippet: string }[] = await res.json();
+    if (query !== searchQuery()) return; // a newer search is on its way
+    searchResults = { query, hits: new Map(hits.map((h) => [h.id, h.snippet])) };
+  } catch {
+    searchResults = null;
+  }
+  renderList();
+}
+
+// Matches what this device already has: the list summaries, plus the full
+// text of the open note (which may be ahead of the server).
+function matchesLocally(n: NoteSummary, terms: string[]): boolean {
+  const body = current?.note.id === n.id ? current.note.doc.getText("body").toString() : "";
+  const haystack = [n.title, n.preview, body, ...n.tags].join("\n").toLowerCase();
+  return terms.every((t) => haystack.includes(t));
+}
+
+function serverHits(): Map<string, string> | null {
+  return searchResults && searchResults.query === searchQuery() ? searchResults.hits : null;
+}
+
 function visibleNotes(): NoteSummary[] {
-  const q = $<HTMLInputElement>("search").value.trim().toLowerCase();
+  const terms = searchTerms();
+  const hits = serverHits();
   return [...notes.values()]
     .filter((n) => (filterTag === TRASH ? n.deleted : !n.deleted))
     .filter((n) => !filterTag || filterTag === TRASH || n.tags.includes(filterTag))
-    .filter(
-      (n) =>
-        !q ||
-        n.title.toLowerCase().includes(q) ||
-        n.preview.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q)),
-    )
+    .filter((n) => terms.length === 0 || hits?.has(n.id) || matchesLocally(n, terms))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// Text with every search term wrapped in <mark>, built without innerHTML.
+function highlighted(text: string, terms: string[]): Node[] {
+  if (terms.length === 0) return [document.createTextNode(text)];
+  const pattern = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(pattern).map((part, i) => {
+    if (i % 2 === 0) return document.createTextNode(part);
+    const mark = document.createElement("mark");
+    mark.textContent = part;
+    return mark;
+  });
 }
 
 function renderList(): void {
   const list = $("note-list");
-  list.replaceChildren(
-    ...visibleNotes().map((n) => {
-      const li = document.createElement("li");
-      li.className = current?.note.id === n.id ? "selected" : "";
-      li.onclick = () => void selectNote(n.id);
-      const title = document.createElement("div");
-      title.className = "title";
-      title.textContent = n.title || "（無題）";
-      const preview = document.createElement("div");
-      preview.className = "preview";
-      preview.textContent = n.preview;
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = [formatDate(n.updatedAt), ...n.tags.map((t) => `#${t}`)].join("  ");
-      li.append(title, preview, meta);
-      return li;
-    }),
-  );
+  const terms = searchTerms();
+  const hits = serverHits();
+  const items = visibleNotes().map((n) => {
+    const li = document.createElement("li");
+    li.className = current?.note.id === n.id ? "selected" : "";
+    li.onclick = () => void selectNote(n.id);
+    const title = document.createElement("div");
+    title.className = "title";
+    title.append(...highlighted(n.title || "（無題）", terms));
+    const preview = document.createElement("div");
+    preview.className = "preview";
+    preview.append(...highlighted((terms.length && hits?.get(n.id)) || n.preview, terms));
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = [formatDate(n.updatedAt), ...n.tags.map((t) => `#${t}`)].join("  ");
+    li.append(title, preview, meta);
+    return li;
+  });
+  if (terms.length && !hits && $("status").dataset.state !== "online") {
+    const note = document.createElement("li");
+    note.className = "notice";
+    note.textContent = "オフラインのため、本文はこの端末で開いているノートだけを検索しています";
+    items.push(note);
+  }
+  list.replaceChildren(...items);
   renderTagFilter();
 }
 
@@ -312,7 +379,10 @@ $("settings").addEventListener("close", () => {
 });
 
 $("open-settings").onclick = openSettings;
-$("search").oninput = renderList;
+$("search").oninput = () => {
+  renderList();
+  scheduleSearch();
+};
 $("back").onclick = () => document.body.classList.remove("show-editor");
 
 $("new-note").onclick = () => {

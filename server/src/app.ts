@@ -30,6 +30,7 @@ export function tokenMatches(expected: string, given: string | null | undefined)
 
 export function createApp(config: Config) {
   const store = new Store(config.dataDir);
+  buildSearchIndex(store);
 
   const server = new Server({
     port: config.port,
@@ -61,6 +62,7 @@ export function createApp(config: Config) {
         createdAt: previous?.createdAt ?? s.createdAt ?? now,
         updatedAt: s.updatedAt ?? now,
       });
+      store.indexBody(id, bodyOf(document), s.tags);
       // Tell every client watching the index that the list changed.
       server.hocuspocus.documents.get(INDEX_DOC)?.broadcastStateless(JSON.stringify({ type: "changed", id }));
     },
@@ -96,6 +98,8 @@ export function createApp(config: Config) {
       if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
 
       if (p === "/api/notes") return send(res, 200, store.listNotes());
+
+      if (p === "/api/search") return send(res, 200, store.search(url.searchParams.get("q") ?? ""));
 
       const m = p.match(/^\/api\/notes\/([A-Za-z0-9-]{1,64})\.txt$/);
       if (m) {
@@ -138,6 +142,20 @@ export function createApp(config: Config) {
   }
 
   return { server, store };
+}
+
+// Databases created before full-text search existed have no index yet.
+function buildSearchIndex(store: Store): void {
+  if (!store.isSearchIndexEmpty()) return;
+  for (const name of store.listDocumentNames()) {
+    const id = noteIdFromDocName(name);
+    const state = store.loadState(name);
+    if (!id || !state) continue;
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, state);
+    store.indexBody(id, bodyOf(doc), summarize(doc).tags);
+    doc.destroy();
+  }
 }
 
 function send(res: ServerResponse, status: number, body: unknown): true {

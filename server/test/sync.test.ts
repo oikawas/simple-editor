@@ -119,3 +119,29 @@ test("exports notes as text files", async () => {
   assert.equal(index[0].createdAt, "2024-01-02T00:00:00.000Z");
   assert.deepEqual(index[0].tags, ["idea", "work"]);
 });
+
+test("full-text search matches body text and tags", async () => {
+  const c = connect("note:n2");
+  await c.synced;
+  c.doc.transact(() => {
+    c.doc.getText("body").insert(0, "週末の予定\n図書館で本を返す\nThen buy Coffee beans");
+    c.doc.getMap("tags").set("private", true);
+  });
+  c.close();
+  await until(async () => (await (await api("/api/search?q=" + encodeURIComponent("図書館"))).json()).length === 1);
+
+  const search = async (q: string) =>
+    ((await (await api("/api/search?q=" + encodeURIComponent(q))).json()) as { id: string; snippet: string }[]);
+  const ids = async (q: string) => (await search(q)).map((h) => h.id).sort();
+
+  assert.deepEqual(await ids("図書館"), ["n2"]); // 3+ chars: trigram index
+  assert.deepEqual(await ids("本"), ["n2"]); // 1 char: scan
+  assert.deepEqual(await ids("hello"), ["n1"]); // body text past the preview
+  assert.deepEqual(await ids("COFFEE"), ["n2"]); // case-insensitive
+  assert.deepEqual(await ids("coffee 図書館"), ["n2"]); // all terms must match
+  assert.deepEqual(await ids("coffee 牛乳"), []);
+  assert.deepEqual(await ids("privat"), ["n2"]); // tags
+  assert.deepEqual(await ids("\"quoted"), []);
+  assert.deepEqual(await ids(""), []);
+  assert.match((await search("beans"))[0].snippet, /Coffee beans/);
+});

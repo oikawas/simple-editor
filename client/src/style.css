@@ -97,3 +97,6 @@ dialog .spacer { flex: 1; }
   .mobile-only { display: inline-block; }
 }
 .cm-ySelectionInfo { font-family: inherit; font-size: 11px; }
+#note-list mark { background: #fde68a; color: inherit; border-radius: 2px; }
+@media (prefers-color-scheme: dark) { #note-list mark { background: #806a1a; } }
+#note-list li.notice { cursor: default; font-size: 12px; color: var(--muted); border-bottom: 0; }

@@ -1,0 +1,32 @@
+# HTTPS front for simple-editor on the local network.
+#
+# Certificates come from Caddy's own local certificate authority; nothing is
+# requested from the internet. Each device trusts the authority's root
+# certificate once, downloaded from http://<server>/ca.crt (see README).
+{
+	local_certs
+	skip_install_trust
+	auto_https disable_redirects
+	# Browsers send no server name (SNI) when connecting by IP, and inside the
+	# container Caddy cannot tell which IP was dialed, so assume the LAN IP.
+	default_sni {$SERVER_IP}
+}
+
+# SERVER_IP is the server's LAN IP; SERVER_NAMES optionally adds local DNS
+# names (space-separated). Keep them stable: each address is its own app origin.
+{$SERVER_IP} {$SERVER_NAMES} {
+	reverse_proxy {$UPSTREAM:simple-editor:8080}
+}
+
+http:// {
+	handle /ca.crt {
+		root * {$CA_DIR:/data/caddy/pki/authorities/local}
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=simple-editor-ca.crt"
+		file_server
+	}
+	handle {
+		redir https://{host}:{$HTTPS_PORT:443}{uri}
+	}
+}

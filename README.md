@@ -8,7 +8,7 @@ English | [日本語](README.ja.md)
 
 Simple Editor is a plain-text notes app you host yourself, written as a replacement for Simplenote.
 
-It runs as one Docker container on a home server and stores everything in a single SQLite file. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects. Full-text search and an edit history you can restore from are built in.
+It runs on a home server with Docker Compose, stores everything in a single SQLite file, and is reached from devices on the same LAN over HTTPS, using certificates from a local certificate authority, so no domain or internet service is needed. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects. Full-text search and an edit history you can restore from are built in.
 
 See [SPEC.md](SPEC.md) for the full specification and design principles, and [CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
@@ -27,6 +27,7 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 ```
 server/   Node.js + Hocuspocus (Yjs sync server) + SQLite. Also serves the web client
 client/   Web client (TypeScript + CodeMirror 6), installable as a PWA
+Caddyfile HTTPS on the LAN (local CA), used by Caddy in compose
 ```
 
 The client is a single PWA. Install it on each platform as follows.
@@ -37,49 +38,66 @@ The client is a single PWA. Install it on each platform as follows.
 | iPhone | Open it in Safari and choose Share → Add to Home Screen |
 | Android | Open it in Chrome and choose "Install app" |
 
-> Installing the PWA and using it offline require **HTTPS** (see below).
+> The app lives at `https://<server IP>/`. Installing the PWA and using it offline require HTTPS, so each device first installs a root certificate (see below).
+
+## Network assumptions
+
+- Devices connect to the server **from the same LAN**. The server is not exposed to the internet (do not set up port forwarding on the router)
+- To use it from outside, join the LAN through a VPN or similar; setting that up and running it is outside the scope of this app
+- Traffic is encrypted with HTTPS even within the LAN. The bundled Caddy issues certificates from its own local certificate authority (CA), so no domain or internet service is needed
 
 ## Running the server (Ubuntu + Docker)
+
+Give the server a fixed IP address, for example with a DHCP reservation on the router. If the IP changes, devices treat the app as a different one.
 
 ```sh
 git clone https://github.com/oikawas/simple-editor.git
 cd simple-editor
-echo "AUTH_TOKEN=$(openssl rand -hex 32)" > .env
+cp .env.example .env
+# Edit .env:
+#   AUTH_TOKEN … a random string, e.g. from openssl rand -hex 32
+#   SERVER_IP  … the server's LAN IP (e.g. 192.168.1.10)
 docker compose up -d --build
 ```
 
-- Data is stored in `./data/notes.db` (SQLite). To back up, copy this file
-- By default the server listens on the host's `127.0.0.1:8080` only. Connect from your devices over HTTPS as described below
-- The settings dialog opens on first visit; enter the `AUTH_TOKEN` from `.env`
+- App data is stored in `./data` and the local CA in `./caddy`. Back up both. Losing `./caddy` means reinstalling the root certificate on every device
+- `./caddy` contains the CA's private key; keep it on the server
 
-### Serving over HTTPS
+## Preparing each device
 
-Either one is enough.
+### 1. Install the root certificate (once per device)
 
-**Tailscale (recommended, no port forwarding)** — put the server and your devices on the same tailnet and run this on the server:
+Open `http://<SERVER_IP>/ca.crt` in the device's browser to download it, then trust it as follows.
+
+| Device | Steps |
+| --- | --- |
+| iPhone | Open it in Safari and tap Allow → install the profile in Settings → General → VPN & Device Management → turn on trust for it in Settings → General → About → Certificate Trust Settings |
+| macOS | Open the downloaded file to add it to the keychain → open the certificate in Keychain Access and set Trust to Always Trust |
+| Android | Choose the downloaded file in Settings → Security → Encryption & credentials → Install a certificate → CA certificate (menu names vary by manufacturer) |
+
+The certificate is served over plain HTTP, so before installing it, compare the SHA-256 fingerprint shown on the device with the value on the server:
 
 ```sh
-sudo tailscale serve --bg 8080
-# → reachable from every device at https://<machine-name>.<tailnet>.ts.net
+openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint -sha256
 ```
 
-**A reverse proxy such as Caddy** — an example for your own domain. WebSocket traffic (`/sync`) is forwarded as is.
+### 2. Open the app
 
-```
-notes.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
+Open `https://<SERVER_IP>/` and enter the `AUTH_TOKEN` from `.env` in the settings dialog. Then install it as a PWA as described in the table above.
 
-### Environment variables
+## Settings (`.env`)
 
 | Name | Default | Description |
 | --- | --- | --- |
 | `AUTH_TOKEN` | (required) | Shared token used by clients. At least 16 characters |
-| `PORT` | `8080` | Port to listen on |
-| `DATA_DIR` | `/data` | Where the SQLite database is stored |
+| `SERVER_IP` | (required) | The server's LAN IP. Covered by the certificate and used in the app's URL |
+| `SERVER_NAMES` | none | DNS names on the LAN (space-separated), added to the certificate |
+| `BIND_ADDRESS` | `0.0.0.0` | Host address to listen on. Set it to the LAN IP to listen on that interface only (ufw does not apply to ports Docker publishes) |
+| `HTTP_PORT` | `80` | Port for the certificate download and the redirect to HTTPS |
+| `HTTPS_PORT` | `443` | With a port other than 443, the URL becomes `https://<SERVER_IP>:<port>/` |
 | `HISTORY_INTERVAL_MINUTES` | `10` | Consecutive edits within this time are folded into one history version |
-| `STATIC_DIR` | `/app/client/dist` | Web client to serve |
+
+When running the app directly without compose, `PORT` (default `8080`), `DATA_DIR`, and `STATIC_DIR` can also be set.
 
 ## API
 

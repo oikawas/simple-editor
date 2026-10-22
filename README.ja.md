@@ -21,6 +21,7 @@ Simplenote の代わりに使える、自宅サーバーで動かすプレーン
 ```
 server/   Node.js + Hocuspocus（Yjs の同期サーバー）+ SQLite。Web クライアントも配信する
 client/   Web クライアント（TypeScript + CodeMirror 6）。PWA としてインストールできる
+Caddyfile LAN 向けの HTTPS（ローカル CA）の設定。compose で Caddy が使う
 ```
 
 クライアントは 1 つの PWA で、各プラットフォームでは次のようにインストールします。
@@ -31,49 +32,66 @@ client/   Web クライアント（TypeScript + CodeMirror 6）。PWA として�
 | iPhone | Safari で開き「共有 → ホーム画面に追加」 |
 | Android | Chrome で開き「アプリをインストール」 |
 
-> PWA のインストールとオフライン動作には **HTTPS** が必要です（後述）。
+> 接続先は `https://<サーバーの IP>/` です。PWA のインストールとオフライン動作には HTTPS が必要なため、事前に各端末へルート証明書をインストールします（後述）。
+
+## ネットワークの前提
+
+- サーバーには **同一 LAN 内の端末から** 接続します。インターネットには公開しません（ルーターのポート転送は設定しないでください）
+- LAN の外から使う場合は、VPN などで LAN に入ってください。その設定と運用はこのアプリの範囲外です
+- 通信は LAN 内でも HTTPS で暗号化します。証明書は同梱の Caddy が独自の認証局（ローカル CA）で発行するため、ドメインやインターネット上のサービスは不要です
 
 ## サーバーの起動（Ubuntu + Docker）
+
+サーバーの IP アドレスは、ルーターの DHCP 予約などで固定しておいてください。IP が変わると、各端末では別のアプリとして扱われます。
 
 ```sh
 git clone https://github.com/oikawas/simple-editor.git
 cd simple-editor
-echo "AUTH_TOKEN=$(openssl rand -hex 32)" > .env
+cp .env.example .env
+# .env を編集する
+#   AUTH_TOKEN … openssl rand -hex 32 で作ったランダムな文字列
+#   SERVER_IP  … サーバーの LAN の IP（例: 192.168.1.10）
 docker compose up -d --build
 ```
 
-- データは `./data/notes.db`（SQLite）に保存されます。バックアップはこのファイルをコピーしてください
-- 初期設定ではホストの `127.0.0.1:8080` のみで待ち受けます。端末からは下記の HTTPS 経由で接続してください
-- 初回アクセス時に設定画面が開くので、`.env` の `AUTH_TOKEN` を入力します
+- アプリのデータは `./data`、ローカル CA は `./caddy` に保存されます。バックアップは両方をコピーしてください。`./caddy` を失うと、全端末でルート証明書の入れ直しが必要になります
+- `./caddy` には CA の秘密鍵が含まれます。外部に出さないでください
 
-### HTTPS で公開する
+## 各端末の準備
 
-どちらか一方で十分です。
+### 1. ルート証明書をインストールする（端末ごとに初回のみ）
 
-**Tailscale（おすすめ・ポート開放不要）** — サーバーと各端末を同じ tailnet に入れ、サーバーで次を実行します。
+端末のブラウザで `http://<SERVER_IP>/ca.crt` を開いてダウンロードし、次の手順で信頼させます。
+
+| 端末 | 手順 |
+| --- | --- |
+| iPhone | Safari で開いて「許可」→「設定 → 一般 → VPN とデバイス管理」でプロファイルをインストール →「設定 → 一般 → 情報 → 証明書信頼設定」でこの証明書を有効にする |
+| macOS | ダウンロードしたファイルを開いてキーチェーンに追加 →「キーチェーンアクセス」でこの証明書を開き、「信頼」を「常に信頼」にする |
+| Android | 「設定 → セキュリティ → 暗号化と認証情報 → 証明書のインストール → CA 証明書」でダウンロードしたファイルを選ぶ（メニュー名は機種により異なります） |
+
+証明書は HTTP で配布されるため、インストールの前に、端末に表示される SHA-256 フィンガープリントをサーバー上の値と照合すると安全です。
 
 ```sh
-sudo tailscale serve --bg 8080
-# → https://<マシン名>.<tailnet>.ts.net で全端末からアクセスできる
+openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint -sha256
 ```
 
-**Caddy などのリバースプロキシ** — 独自ドメインで公開する場合の例です。WebSocket（`/sync`）もそのまま転送されます。
+### 2. アプリを開く
 
-```
-notes.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
+`https://<SERVER_IP>/` を開き、設定画面で `.env` の `AUTH_TOKEN` を入力します。その後、上の表の方法で PWA としてインストールします。
 
-### 環境変数
+## 設定（`.env`）
 
 | 名前 | 既定値 | 説明 |
 | --- | --- | --- |
 | `AUTH_TOKEN` | （必須） | クライアントが使う共有トークン。16 文字以上 |
-| `PORT` | `8080` | 待ち受けポート |
-| `DATA_DIR` | `/data` | SQLite の保存先 |
+| `SERVER_IP` | （必須） | サーバーの LAN の IP。証明書の対象になり、接続先の URL にもなる |
+| `SERVER_NAMES` | なし | LAN 内の DNS 名（空白区切り）。証明書の対象に加わる |
+| `BIND_ADDRESS` | `0.0.0.0` | 待ち受けるホストのアドレス。LAN の IP を指定すると、そのインターフェイスだけで待ち受ける（Docker が公開するポートには ufw が効かないため） |
+| `HTTP_PORT` | `80` | ルート証明書の配布と HTTPS への転送に使うポート |
+| `HTTPS_PORT` | `443` | 443 以外にした場合、URL は `https://<SERVER_IP>:<ポート>/` になる |
 | `HISTORY_INTERVAL_MINUTES` | `10` | この時間内の連続した編集を履歴の 1 つの版にまとめる |
-| `STATIC_DIR` | `/app/client/dist` | 配信する Web クライアント |
+
+compose を使わずにアプリを直接起動する場合は、ほかに `PORT`（既定 `8080`）、`DATA_DIR`、`STATIC_DIR` を指定できます。
 
 ## API
 

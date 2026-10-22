@@ -10,10 +10,17 @@ Provide a plain-text notes app that replaces Simplenote and runs on a home serve
 
 | Area | Target |
 | --- | --- |
-| Server | Docker container on Ubuntu (linux/amd64, linux/arm64) |
+| Server | Docker Compose on Ubuntu (two containers, the app and Caddy; linux/amd64, linux/arm64) |
 | Clients | macOS (Apple Silicon / Intel), iPhone, Android |
 
-The client is a single web app (PWA), installed to the home screen or Dock from each platform's browser. Installing a PWA and running it offline require HTTPS, so the server is assumed to be exposed over HTTPS through Tailscale or a reverse proxy.
+The client is a single web app (PWA), installed to the home screen or Dock from each platform's browser.
+
+### 2.1 Network assumptions
+
+- The server is assumed to be **reachable from devices on the same LAN**
+- How to use it from outside the LAN (a VPN or similar) and running that is outside the scope of this app. A device that joins the LAN through a VPN is treated like any other device on the LAN
+- Exposure to the internet is not intended
+- Installing a PWA and running it offline require HTTPS, so connections use HTTPS even within the LAN (section 4.2)
 
 ## 3. Functional specification
 
@@ -111,8 +118,12 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 │ "__index" listener ─┘                      │  │  wss://…/sync
 │ fetch ──────────────────────────────────── ┼──┤  https://…/api/*
 └────────────────────────────────────────────┘  │
-                                                ▼
-┌──────────── Server (Docker) ──────────────────┐
+                                       LAN      ▼
+┌──────────── Server (Docker Compose) ──────────┐
+│ Caddy (:443 HTTPS / :80 certificate download) │
+│   └ issues certificates from its local CA     │
+│        │ http://simple-editor:8080            │
+│        ▼                                      │
 │ Node.js + Hocuspocus                          │
 │   ├ WebSocket: Yjs sync, authentication       │
 │   ├ HTTP: REST API, serves the web client     │
@@ -129,7 +140,18 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 - On startup, an empty full-text index is rebuilt from the stored documents, and notes without any version get a first version from their current content (for databases created before these features existed)
 - Serves the built web client. Files under `assets/`, whose names contain a hash, are cached long-term; everything else is revalidated each time. Unknown paths return `index.html`
 
-### 4.2 Client
+### 4.2 HTTPS on the LAN (Caddy)
+
+- Compose puts Caddy in front to terminate HTTPS and forward to the app. The app container publishes no host port and is reachable only through Caddy
+- Certificates are issued by Caddy's built-in **local certificate authority (CA)**. No public certificate authority or domain is used
+  - The root certificate (valid for about 10 years) is installed and trusted once on each device
+  - Intermediate and server certificates are short-lived and renewed by Caddy automatically, with nothing to do on the devices
+- Certificates cover `SERVER_IP` (the server's LAN IP address) and the optional `SERVER_NAMES` (DNS names on the LAN)
+- Browsers send no TLS server name (SNI) when connecting by IP address, and Caddy inside the container cannot tell which IP was dialed, so connections without SNI get the certificate for `SERVER_IP`
+- Plain HTTP (port 80) only serves the root certificate (`/ca.crt`) and redirects to HTTPS
+- On-device data (settings, the cached list, unsent edits) is kept per URL. If the server's IP address (or name) changes, devices treat the app as a different one, so the IP should be fixed (for example, a DHCP reservation on the router)
+
+### 4.3 Client
 
 - TypeScript (no framework), built with Vite. The editor is CodeMirror 6
 - Only one WebSocket is opened; the open notes and `__index` are multiplexed over it
@@ -201,8 +223,12 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 - The token must be at least 16 characters, checked at startup. Comparison is constant-time over SHA-256 hashes
 - WebSocket connections are refused unless the document name is `__index` or a well-formed `note:<id>`
 - Static file serving refuses paths that point outside the served directory
-- The container runs as a non-root user (`node`). The default compose file publishes the port on the host's `127.0.0.1` only
-- Encryption in transit is left to the front end (Tailscale, a reverse proxy)
+- Traffic is encrypted with HTTPS by Caddy even within the LAN, so other machines on the same LAN cannot read the token or the notes
+- Only Caddy's ports 80 and 443 are published on the host; the app's port is not. Port 80 is used only for the certificate download and the redirect to HTTPS
+- Host firewall rules such as ufw do not apply to ports Docker publishes. Set `BIND_ADDRESS` to listen on the LAN interface only. Do not set up port forwarding on the router
+- The local CA's private key is stored in `./caddy` on the server. Anyone holding it can forge certificates for any site that devices with the root certificate will trust, so it must not leave the server
+- The root certificate is downloaded over HTTP, so that first download is unprotected. Comparing the SHA-256 fingerprint shown on the device with the value on the server before installing is recommended
+- The app container starts as root, fixes the ownership of the data directory, then drops to a non-root user (`node`) to run the server
 - The token is stored in plain text in the device's localStorage, relying on the device's own protection (screen lock and the like)
 
 ## 9. Design principles
@@ -212,6 +238,7 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 - **Offline as the normal case** — Phones lose their connection all the time. Changes are saved on the device first and reliably sent to the server later
 - **One codebase for every device** — A single PWA is far less to maintain than native apps for macOS, iPhone, and Android. If native apps are needed later, the same web code is to be wrapped with Tauri or Capacitor
 - **Few dependencies** — No UI framework; proven building blocks (Yjs, Hocuspocus, CodeMirror, SQLite) are combined
+- **Self-contained on the LAN** — Nothing, certificates included, depends on services on the internet. Reaching the LAN from outside is left to whatever the user already has (a VPN or similar)
 - **Derived data can be rebuilt** — List summaries and the search index are derived from the Yjs state and can be rebuilt at any time
 - **Readable history, restore as an ordinary edit** — Reconstructing past points from Yjs's internal state means disabling garbage collection and growing storage. Versions are stored as plain body and tag text, readable as is and usable for export. Restoring is an ordinary edit that overwrites with the old content, so concurrent editing, offline use, and undo all keep working
 - **Built for one person** — No accounts or permissions, just one shared token. Multi-user use is future work
@@ -222,4 +249,6 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 - Permanent deletion is not implemented
 - Edit history is never deleted and keeps growing; no retention period or version limit is implemented
 - A single user (one shared token) is assumed
+- The local CA's root certificate has to be installed on each device
+- Changing the server's IP address (or name) makes each device treat the app as a different one. Edits not yet sent at that point are lost
 - Body formatting (such as rendering Markdown) is not handled

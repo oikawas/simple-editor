@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- HTTPS within the LAN. Compose adds Caddy, which issues certificates from its own local certificate authority (CA); each device trusts the root certificate downloaded from `http://<server>/ca.crt`. Connections by IP address (without SNI) are supported
+- `.env` settings `SERVER_IP`, `SERVER_NAMES`, `BIND_ADDRESS`, `HTTP_PORT`, and `HTTPS_PORT`
+
 - Viewing and restoring edit history. The server records a version of the body and tags on every store (folding consecutive edits within 10 minutes into one), and "History" in the editor lists the versions, shows a diff against the current text or the full text, and restores any of them. A restore syncs to other devices, and the content from before it stays in the history
 - `GET /api/notes/<id>/versions` and `GET /api/notes/<id>/versions/<version id>` APIs, and the `HISTORY_INTERVAL_MINUTES` environment variable
 - Creating each note's first version on startup for databases created before history existed
@@ -27,6 +30,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Client: web app installable as a PWA (CodeMirror 6) with tags, trash, search (title, beginning of the body, tags), offline editing with IndexedDB, automatic merging of concurrent edits across devices, and other devices' cursors
 - Docker image and compose file for a home server
 - MIT license
+
+### Changed
+
+- The premise is now that devices connect to the server from the same LAN. Reaching it from outside (a VPN or similar) is out of scope, and the README's instructions for exposing it through Tailscale or a reverse proxy were removed
+- The app container no longer publishes a host port; it is reachable only through Caddy
+
+### Fixed
+
+- Starting compose without an existing `./data` failed because Docker created the directory as root and the app could not write to it. The container now fixes the ownership on startup, then drops to a non-root user
+- Compose did not pass `HISTORY_INTERVAL_MINUTES` to the app
 
 [Unreleased]: https://github.com/oikawas/simple-editor/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/oikawas/simple-editor/releases/tag/v0.1.0

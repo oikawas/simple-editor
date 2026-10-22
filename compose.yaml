@@ -6,7 +6,29 @@ services:
     environment:
       # Generate with: openssl rand -hex 32
       AUTH_TOKEN: ${AUTH_TOKEN:?set AUTH_TOKEN in .env}
+      HISTORY_INTERVAL_MINUTES: ${HISTORY_INTERVAL_MINUTES:-10}
     volumes:
       - ./data:/data
+    # Reached only through caddy; not published on the host.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - simple-editor
+    environment:
+      SERVER_IP: ${SERVER_IP:?set SERVER_IP in .env}
+      SERVER_NAMES: ${SERVER_NAMES:-}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
     ports:
-      - "127.0.0.1:8080:8080"
+      # Docker publishes ports past ufw; set BIND_ADDRESS to the server's LAN
+      # IP to listen on that interface only.
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Holds the local certificate authority. Back it up with ./data; losing
+      # it means installing a new root certificate on every device.
+      - ./caddy:/data

@@ -15,9 +15,9 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/server/package.json server/
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/client/dist client/dist
-RUN mkdir -p /data && chown node:node /data
-USER node
+COPY docker-entrypoint.sh /usr/local/bin/
 VOLUME /data
 EXPOSE 8080
 HEALTHCHECK CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server/dist/index.js"]

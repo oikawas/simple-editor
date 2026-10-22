@@ -69,7 +69,18 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 - The search is re-run when a note is updated on another device
 - While offline, the search runs on the device. Only the open note is searched by its full body; other notes are matched by title, preview, and tags (the list says so)
 
-### 3.8 Export
+### 3.8 Edit history
+
+- Every time the server stores a note, it records a snapshot of the body and tags as a "version"
+- Consecutive edits are folded into one version: a store within a set time (10 minutes by default, configurable with `HISTORY_INTERVAL_MINUTES`) of the latest version's creation updates that version instead of adding one
+- Nothing is recorded when the body and tags equal the latest version (for example, moving a note to the trash)
+- "履歴" (History) in the editor lists the versions (save time, title, character count, newest first). Selecting one shows either a line diff against the current body (lines restoring would add / remove) or the version's full text. When the diff is too large, the full text is shown
+- "この版に戻す" (Restore this version) replaces the body and tags with the version's. Restoring is an ordinary edit, so it syncs to other devices as is, and the editor's undo (Ctrl/⌘+Z) can revert the body
+- Restoring always starts a new version, so the content from before the restore remains as the previous version. Text typed just before restoring (within the few seconds a store waits) may not be recorded in a version
+- Viewing and restoring history requires a connection to the server
+- Versions are never deleted (no retention limit)
+
+### 3.9 Export
 
 - **One note**: the ".txt" button in the editor saves the current note's body as a text file. It is generated on the device, so it works offline
 - **All notes**: "すべて書き出し" (Export all) in the settings downloads a zip containing:
@@ -78,7 +89,7 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 - File names are the title with characters not allowed in file names replaced by `_`, cut to 80 characters. An empty title becomes `untitled`; duplicates get a number such as ` (2)`
 - Notes in the trash are left out (the API includes them with `?trash=1`)
 
-### 3.9 Settings and authentication
+### 3.10 Settings and authentication
 
 - On first launch the settings dialog opens and asks for:
   - Server URL (defaults to the URL the app was opened from)
@@ -106,7 +117,7 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 │   ├ WebSocket: Yjs sync, authentication       │
 │   ├ HTTP: REST API, serves the web client     │
 │   └ store hook → SQLite (better-sqlite3)      │
-│        documents / notes / notes_fts          │
+│   documents / notes / notes_fts / versions    │
 └───────────────────────────────────────────────┘
 ```
 
@@ -114,8 +125,8 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 
 - Node.js 22 and TypeScript. Hocuspocus accepts both WebSocket (Yjs sync) and HTTP
 - Documents are stored 1 second after a change (at most 5 seconds while changes keep coming)
-- Every store writes the Yjs state, the list summary, and the full-text index to SQLite, then notifies every client subscribed to `__index`
-- On startup, if the full-text index is empty, it is rebuilt from the stored documents (for databases created before search existed)
+- Every store writes the Yjs state, the list summary, the full-text index, and the history version to SQLite, then notifies every client subscribed to `__index`
+- On startup, an empty full-text index is rebuilt from the stored documents, and notes without any version get a first version from their current content (for databases created before these features existed)
 - Serves the built web client. Files under `assets/`, whose names contain a hash, are cached long-term; everything else is revalidated each time. Unknown paths return `index.html`
 
 ### 4.2 Client
@@ -135,7 +146,7 @@ The document name is `note:<id>`, where `<id>` is 1–64 letters, digits, or hyp
 | Key | Type | Contents |
 | --- | --- | --- |
 | `getText("body")` | `Y.Text` | Body |
-| `getMap("meta")` | `Y.Map` | `createdAt` (ms), `updatedAt` (ms), `deleted` (boolean) |
+| `getMap("meta")` | `Y.Map` | `createdAt` (ms), `updatedAt` (ms), `deleted` (boolean), `restoredAt` (when a version was last restored, ms) |
 | `getMap("tags")` | `Y.Map` | tag name → `true` |
 
 Tags are a map rather than an array so that concurrent additions and removals on different devices merge as a set, without duplicates or lost entries.
@@ -149,6 +160,7 @@ Tags are a map rather than an array so that concurrent additions and removals on
 | `documents(name, state)` | The Yjs state of each document (binary). The source of truth |
 | `notes(id, title, preview, tags, created_at, updated_at, deleted)` | List summaries, derived from `documents` |
 | `notes_fts(id, body, tags)` | Full-text index (FTS5 with the trigram tokenizer), derived from `documents` |
+| `versions(id, note_id, started_at, saved_at, body, tags, restore_mark)` | History versions. `started_at` is when the version was created, `saved_at` when it was last updated. `restore_mark` is the `restoredAt` at recording time; a change in it starts a new version |
 
 The journal mode is WAL.
 
@@ -178,8 +190,10 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 | `GET /api/health` | `{"ok": true}` |
 | `GET /api/notes` | Array of note summaries (`id`, `title`, `preview`, `tags`, `createdAt`, `updatedAt`, `deleted`), newest first |
 | `GET /api/search?q=<terms>` | Array of `{id, snippet}`, newest first, up to 200 |
+| `GET /api/notes/<id>/versions` | The note's versions: array of `{id, savedAt, title, length}`, newest first |
+| `GET /api/notes/<id>/versions/<version id>` | One version: `{id, savedAt, body, tags}` |
 | `GET /api/notes/<id>.txt` | The body (`text/plain; charset=utf-8`, as an attachment) |
-| `GET /api/export.zip[?trash=1]` | Zip of all notes (section 3.8) |
+| `GET /api/export.zip[?trash=1]` | Zip of all notes (section 3.9) |
 | WebSocket `/sync` | Yjs sync over the Hocuspocus protocol. The token is sent when connecting |
 
 ## 8. Security
@@ -199,11 +213,13 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 - **One codebase for every device** — A single PWA is far less to maintain than native apps for macOS, iPhone, and Android. If native apps are needed later, the same web code is to be wrapped with Tauri or Capacitor
 - **Few dependencies** — No UI framework; proven building blocks (Yjs, Hocuspocus, CodeMirror, SQLite) are combined
 - **Derived data can be rebuilt** — List summaries and the search index are derived from the Yjs state and can be rebuilt at any time
+- **Readable history, restore as an ordinary edit** — Reconstructing past points from Yjs's internal state means disabling garbage collection and growing storage. Versions are stored as plain body and tag text, readable as is and usable for export. Restoring is an ordinary edit that overwrites with the old content, so concurrent editing, offline use, and undo all keep working
 - **Built for one person** — No accounts or permissions, just one shared token. Multi-user use is future work
 
 ## 10. Limitations
 
 - Offline full-text search covers only the open note
-- Permanent deletion and browsing/restoring edit history are not implemented
+- Permanent deletion is not implemented
+- Edit history is never deleted and keeps growing; no retention period or version limit is implemented
 - A single user (one shared token) is assumed
 - Body formatting (such as rendering Markdown) is not handled

@@ -2,7 +2,8 @@ import * as Y from "yjs";
 
 // Shape of a note document (shared with the client):
 //   getText("body")  - note content
-//   getMap("meta")   - { createdAt: number, updatedAt: number, deleted: boolean }
+//   getMap("meta")   - { createdAt: number, updatedAt: number, deleted: boolean,
+//                        restoredAt: number (set when a version is restored) }
 //   getMap("tags")   - tag name -> true (map gives set semantics that merge cleanly)
 
 export const NOTE_PREFIX = "note:";
@@ -44,4 +45,9 @@ export function summarize(
 
 export function bodyOf(doc: Y.Doc): string {
   return doc.getText("body").toString();
+}
+
+export function restoreMarkOf(doc: Y.Doc): number {
+  const mark = doc.getMap("meta").get("restoredAt");
+  return typeof mark === "number" ? mark : 0;
 }

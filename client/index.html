@@ -27,6 +27,7 @@
         <header class="bar">
           <button id="back" class="mobile-only" title="一覧へ">‹ 一覧</button>
           <div id="tags" class="tags"></div>
+          <button id="history-note" title="編集履歴">🕘<span class="label"> 履歴</span></button>
           <button id="export-note" title="テキストとして書き出し">⇩ .txt</button>
           <button id="trash-note" title="ゴミ箱へ">🗑</button>
         </header>
@@ -50,6 +51,29 @@
           <button value="save" class="primary">保存</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="history">
+      <header class="history-head">
+        <h2>編集履歴</h2>
+        <span class="spacer"></span>
+        <button id="history-close">閉じる</button>
+      </header>
+      <div class="history-body">
+        <div id="version-list"></div>
+        <section id="version-view">
+          <div class="history-tools">
+            <div class="segmented">
+              <button data-mode="diff" class="active">現在との差分</button>
+              <button data-mode="full">この版の全文</button>
+            </div>
+            <span class="spacer"></span>
+            <button id="restore-version" class="primary" disabled>この版に戻す</button>
+          </div>
+          <div id="version-meta" class="dates"></div>
+          <div id="version-text" class="version-text"></div>
+        </section>
+      </div>
+      <p class="hint">戻すと、本文とタグがこの版の内容に置き換わります。置き換える前の内容も履歴に残ります。</p>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

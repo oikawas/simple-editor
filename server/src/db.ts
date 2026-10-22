@@ -42,6 +42,20 @@ export function snippet(body: string, terms: string[], before = 12, after = 100)
   return (start > 0 ? "…" : "") + text + (end < body.length ? "…" : "");
 }
 
+export interface VersionInfo {
+  id: number;
+  savedAt: number;
+  title: string;
+  length: number;
+}
+
+export interface Version {
+  id: number;
+  savedAt: number;
+  body: string;
+  tags: string[];
+}
+
 export class Store {
   private db: Database.Database;
 
@@ -65,6 +79,17 @@ export class Store {
       );
       -- Full-text index over note bodies and tags. The trigram tokenizer
       -- matches substrings, so it works for Japanese without word splitting.
+      -- Snapshots of each note's body and tags, newest last.
+      CREATE TABLE IF NOT EXISTS versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        note_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        saved_at INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        tags TEXT NOT NULL,
+        restore_mark INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS versions_note ON versions (note_id, id);
       CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
         id UNINDEXED, body, tags, tokenize = 'trigram'
       );
@@ -150,6 +175,64 @@ export class Store {
   listNotes(): NoteSummary[] {
     const rows = this.db.prepare("SELECT * FROM notes ORDER BY updated_at DESC").all() as NoteRow[];
     return rows.map(toSummary);
+  }
+
+  // Records the note's content as a version. Saves within `intervalMs` of the
+  // latest version's start update that version instead of adding one, so a
+  // burst of typing becomes a single entry. Unchanged content is skipped.
+  // A new `restoreMark` (set by the client when it restores a version) always
+  // starts a new version, so the content from before the restore is kept.
+  recordVersion(
+    noteId: string,
+    body: string,
+    tags: string[],
+    now: number,
+    intervalMs: number,
+    restoreMark = 0,
+  ): void {
+    const tagsJson = JSON.stringify(tags);
+    const latest = this.db
+      .prepare(
+        "SELECT id, started_at, body, tags, restore_mark FROM versions WHERE note_id = ? ORDER BY id DESC LIMIT 1",
+      )
+      .get(noteId) as
+      | { id: number; started_at: number; body: string; tags: string; restore_mark: number }
+      | undefined;
+    if (latest && latest.body === body && latest.tags === tagsJson) return;
+    if (latest && now - latest.started_at < intervalMs && latest.restore_mark === restoreMark) {
+      this.db
+        .prepare("UPDATE versions SET saved_at = ?, body = ?, tags = ? WHERE id = ?")
+        .run(now, body, tagsJson, latest.id);
+    } else {
+      this.db
+        .prepare(
+          "INSERT INTO versions (note_id, started_at, saved_at, body, tags, restore_mark) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .run(noteId, now, now, body, tagsJson, restoreMark);
+    }
+  }
+
+  hasVersions(noteId: string): boolean {
+    return this.db.prepare("SELECT 1 FROM versions WHERE note_id = ? LIMIT 1").get(noteId) !== undefined;
+  }
+
+  listVersions(noteId: string): VersionInfo[] {
+    const rows = this.db
+      .prepare("SELECT id, saved_at, body FROM versions WHERE note_id = ? ORDER BY id DESC")
+      .all(noteId) as { id: number; saved_at: number; body: string }[];
+    return rows.map((r) => ({
+      id: r.id,
+      savedAt: r.saved_at,
+      title: (r.body.split("\n").find((l) => l.trim()) ?? "").trim().slice(0, 200),
+      length: r.body.length,
+    }));
+  }
+
+  getVersion(noteId: string, versionId: number): Version | null {
+    const row = this.db
+      .prepare("SELECT id, saved_at, body, tags FROM versions WHERE note_id = ? AND id = ?")
+      .get(noteId, versionId) as { id: number; saved_at: number; body: string; tags: string } | undefined;
+    return row ? { id: row.id, savedAt: row.saved_at, body: row.body, tags: JSON.parse(row.tags) } : null;
   }
 
   close(): void {

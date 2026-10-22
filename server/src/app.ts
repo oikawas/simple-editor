@@ -7,7 +7,7 @@ import * as Y from "yjs";
 import type { Config } from "./config.js";
 import { Store } from "./db.js";
 import { buildZip, fileNameFor } from "./export.js";
-import { INDEX_DOC, NOTE_PREFIX, bodyOf, noteIdFromDocName, summarize } from "./note.js";
+import { INDEX_DOC, NOTE_PREFIX, bodyOf, noteIdFromDocName, restoreMarkOf, summarize } from "./note.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -30,7 +30,7 @@ export function tokenMatches(expected: string, given: string | null | undefined)
 
 export function createApp(config: Config) {
   const store = new Store(config.dataDir);
-  buildSearchIndex(store);
+  buildDerivedData(store);
 
   const server = new Server({
     port: config.port,
@@ -63,6 +63,7 @@ export function createApp(config: Config) {
         updatedAt: s.updatedAt ?? now,
       });
       store.indexBody(id, bodyOf(document), s.tags);
+      store.recordVersion(id, bodyOf(document), s.tags, now, config.historyIntervalMs, restoreMarkOf(document));
       // Tell every client watching the index that the list changed.
       server.hocuspocus.documents.get(INDEX_DOC)?.broadcastStateless(JSON.stringify({ type: "changed", id }));
     },
@@ -100,6 +101,15 @@ export function createApp(config: Config) {
       if (p === "/api/notes") return send(res, 200, store.listNotes());
 
       if (p === "/api/search") return send(res, 200, store.search(url.searchParams.get("q") ?? ""));
+
+      const versions = p.match(/^\/api\/notes\/([A-Za-z0-9-]{1,64})\/versions$/);
+      if (versions) return send(res, 200, store.listVersions(versions[1]));
+
+      const version = p.match(/^\/api\/notes\/([A-Za-z0-9-]{1,64})\/versions\/(\d{1,15})$/);
+      if (version) {
+        const v = store.getVersion(version[1], Number(version[2]));
+        return v ? send(res, 200, v) : send(res, 404, { error: "not found" });
+      }
 
       const m = p.match(/^\/api\/notes\/([A-Za-z0-9-]{1,64})\.txt$/);
       if (m) {
@@ -144,16 +154,25 @@ export function createApp(config: Config) {
   return { server, store };
 }
 
-// Databases created before full-text search existed have no index yet.
-function buildSearchIndex(store: Store): void {
-  if (!store.isSearchIndexEmpty()) return;
+// Databases created before full-text search or history existed lack the
+// search index and a first version; derive them from the stored documents.
+function buildDerivedData(store: Store): void {
+  const indexEmpty = store.isSearchIndexEmpty();
   for (const name of store.listDocumentNames()) {
     const id = noteIdFromDocName(name);
+    if (!id) continue;
+    const needsVersion = !store.hasVersions(id);
+    if (!indexEmpty && !needsVersion) continue;
     const state = store.loadState(name);
-    if (!id || !state) continue;
+    if (!state) continue;
     const doc = new Y.Doc();
     Y.applyUpdate(doc, state);
-    store.indexBody(id, bodyOf(doc), summarize(doc).tags);
+    const { tags } = summarize(doc);
+    if (indexEmpty) store.indexBody(id, bodyOf(doc), tags);
+    if (needsVersion) {
+      const savedAt = store.getNote(id)?.updatedAt ?? Date.now();
+      store.recordVersion(id, bodyOf(doc), tags, savedAt, 0, restoreMarkOf(doc));
+    }
     doc.destroy();
   }
 }

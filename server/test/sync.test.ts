@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import JSZip from "jszip";
 import * as Y from "yjs";
 import { createApp } from "../src/app.js";
+import { Store } from "../src/db.js";
 
 const TOKEN = "test-token-0123456789";
 let dataDir: string;
@@ -15,7 +16,7 @@ let base: string;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-editor-"));
-  app = createApp({ port: 0, dataDir, authToken: TOKEN, staticDir: null });
+  app = createApp({ port: 0, dataDir, authToken: TOKEN, staticDir: null, historyIntervalMs: 0 });
   await app.server.listen(0);
   base = `127.0.0.1:${app.server.address.port}`;
 });
@@ -144,4 +145,54 @@ test("full-text search matches body text and tags", async () => {
   assert.deepEqual(await ids("\"quoted"), []);
   assert.deepEqual(await ids(""), []);
   assert.match((await search("beans"))[0].snippet, /Coffee beans/);
+});
+
+test("history folds edits within the interval and skips unchanged content", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-editor-store-"));
+  const store = new Store(dir);
+  try {
+    const min = 60_000;
+    store.recordVersion("h", "a", [], 0, 10 * min);
+    store.recordVersion("h", "ab", [], 5 * min, 10 * min); // same burst
+    store.recordVersion("h", "ab", [], 20 * min, 10 * min); // unchanged
+    store.recordVersion("h", "abc", ["t"], 30 * min, 10 * min); // new version
+    store.recordVersion("h", "a", [], 31 * min, 10 * min, 1); // restore: new version despite the window
+    store.recordVersion("h", "ax", [], 32 * min, 10 * min, 1); // typing after the restore folds in
+    const list = store.listVersions("h");
+    assert.deepEqual(
+      list.map((v) => [v.savedAt, v.title]),
+      [
+        [32 * min, "ax"],
+        [30 * min, "abc"],
+        [5 * min, "ab"],
+      ],
+    );
+    assert.deepEqual(store.getVersion("h", list[1].id), { id: list[1].id, savedAt: 30 * min, body: "abc", tags: ["t"] });
+    assert.equal(store.getVersion("other", list[0].id), null);
+  } finally {
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lists and returns a note's versions", async () => {
+  const c = connect("note:h1");
+  await c.synced;
+  c.doc.getText("body").insert(0, "first draft");
+  await until(async () => (await (await api("/api/notes/h1/versions")).json()).length === 1);
+  c.doc.transact(() => {
+    c.doc.getText("body").insert(0, "Title\n");
+    c.doc.getMap("tags").set("x", true);
+  });
+  await until(async () => (await (await api("/api/notes/h1/versions")).json()).length === 2);
+  c.close();
+
+  const list = await (await api("/api/notes/h1/versions")).json();
+  assert.equal(list[0].title, "Title"); // newest first
+  assert.equal(list[1].title, "first draft");
+  const old = await (await api(`/api/notes/h1/versions/${list[1].id}`)).json();
+  assert.equal(old.body, "first draft");
+  assert.deepEqual(old.tags, []);
+  assert.equal((await api(`/api/notes/n1/versions/${list[1].id}`)).status, 404);
+  assert.equal((await api(`/api/notes/h1/versions/abc`)).status, 404);
 });

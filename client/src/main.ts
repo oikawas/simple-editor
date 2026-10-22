@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder, drawSelection } from "@codemirror/view";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
+import { lineDiff, restoreVersion, type Version, type VersionInfo } from "./history";
 import { newId, normalizeTag, summarize, type NoteSummary } from "./notes";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import { SyncClient, hasPending, type OpenNote, type Status } from "./sync";
@@ -188,8 +189,8 @@ function renderTagFilter(): void {
   );
 }
 
-function formatDate(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+function formatDate(ms: number, withSeconds = false): string {
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: withSeconds ? "medium" : "short" });
 }
 
 // ---- editor ----------------------------------------------------------------
@@ -391,6 +392,133 @@ $("new-note").onclick = () => {
   void selectNote(id, true).then(() => {
     if (filterTag && current) current.note.doc.getMap("tags").set(filterTag, true);
   });
+};
+
+// ---- history ----------------------------------------------------------------
+
+let historyMode: "diff" | "full" = "diff";
+let shownVersion: Version | null = null;
+let versionRequest = 0;
+
+async function openHistory(): Promise<void> {
+  if (!current) return;
+  const id = current.note.id;
+  const dialog = $<HTMLDialogElement>("history");
+  const list = $("version-list");
+  shownVersion = null;
+  renderVersion();
+  list.replaceChildren(notice("読み込み中…"));
+  dialog.showModal();
+
+  let versions: VersionInfo[];
+  try {
+    const res = await fetch(`${settings.serverUrl}/api/notes/${id}/versions`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(String(res.status));
+    versions = await res.json();
+  } catch {
+    list.replaceChildren(notice("履歴を読み込めませんでした。サーバーに接続できるか確認してください。"));
+    return;
+  }
+  if (versions.length === 0) {
+    list.replaceChildren(notice("まだ履歴がありません。編集内容は保存されると履歴に残ります。"));
+    return;
+  }
+  const items = versions.map((v, i) => {
+    const li = document.createElement("div");
+    li.className = "version";
+    const when = document.createElement("div");
+    when.className = "title";
+    when.textContent = formatDate(v.savedAt, true) + (i === 0 ? "（最新）" : "");
+    const title = document.createElement("div");
+    title.className = "preview";
+    title.textContent = `${v.title || "（無題）"} · ${v.length.toLocaleString()} 文字`;
+    li.append(when, title);
+    li.onclick = () => {
+      items.forEach((x) => x.classList.toggle("selected", x === li));
+      void showVersion(id, v.id);
+    };
+    return li;
+  });
+  list.replaceChildren(...items);
+  // The newest version is usually what is on screen; start with the one before it.
+  items[Math.min(1, items.length - 1)].click();
+}
+
+async function showVersion(noteId: string, versionId: number): Promise<void> {
+  const request = ++versionRequest;
+  try {
+    const res = await fetch(`${settings.serverUrl}/api/notes/${noteId}/versions/${versionId}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const version: Version = await res.json();
+    if (request !== versionRequest) return;
+    shownVersion = version;
+  } catch {
+    if (request !== versionRequest) return;
+    shownVersion = null;
+  }
+  renderVersion();
+}
+
+function renderVersion(): void {
+  const box = $("version-text");
+  const restore = $<HTMLButtonElement>("restore-version");
+  restore.disabled = !shownVersion || !current;
+  document.querySelectorAll<HTMLButtonElement>("#history .segmented button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === historyMode);
+  });
+  if (!shownVersion || !current) {
+    $("version-meta").textContent = "";
+    box.replaceChildren();
+    return;
+  }
+  const v = shownVersion;
+  const tags = v.tags.length ? v.tags.map((t) => `#${t}`).join(" ") : "なし";
+  $("version-meta").textContent = `${formatDate(v.savedAt, true)} の版　タグ: ${tags}`;
+
+  const now = current.note.doc.getText("body").toString();
+  const diff = historyMode === "diff" ? lineDiff(now, v.body) : null;
+  if (historyMode === "diff" && diff && diff.every((d) => d.kind === "same")) {
+    box.replaceChildren(notice("現在の本文と同じです"));
+    return;
+  }
+  const lines = diff ?? v.body.split("\n").map((text) => ({ kind: "same" as const, text }));
+  const legend = diff
+    ? [notice("＋ 戻すと加わる行　− 戻すと消える行")]
+    : historyMode === "diff"
+      ? [notice("差分を表示するには大きすぎるため、全文を表示しています")]
+      : [];
+  box.replaceChildren(
+    ...legend,
+    ...lines.map((d) => {
+      const div = document.createElement("div");
+      div.className = `line ${d.kind}`;
+      div.textContent = d.text || "\u00a0";
+      return div;
+    }),
+  );
+}
+
+function notice(text: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "notice";
+  el.textContent = text;
+  return el;
+}
+
+$("history-note").onclick = () => void openHistory();
+$("history-close").onclick = () => $<HTMLDialogElement>("history").close();
+document.querySelectorAll<HTMLButtonElement>("#history .segmented button").forEach((b) => {
+  b.onclick = () => {
+    historyMode = b.dataset.mode as "diff" | "full";
+    renderVersion();
+  };
+});
+$("restore-version").onclick = () => {
+  if (!current || !shownVersion) return;
+  restoreVersion(current.note.doc, shownVersion);
+  $<HTMLDialogElement>("history").close();
 };
 
 $("trash-note").onclick = () => {

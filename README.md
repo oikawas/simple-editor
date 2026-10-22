@@ -8,7 +8,7 @@ English | [日本語](README.ja.md)
 
 Simple Editor is a plain-text notes app you host yourself, written as a replacement for Simplenote.
 
-It runs as one Docker container on a home server and stores everything in a single SQLite file. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects.
+It runs as one Docker container on a home server and stores everything in a single SQLite file. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects. Full-text search and an edit history you can restore from are built in.
 
 See [SPEC.md](SPEC.md) for the full specification and design principles, and [CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
@@ -18,6 +18,7 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 - **Safe concurrent editing from several devices** — edits sync through Yjs. Whether you edit the same note on several devices at once or while offline, changes are merged without losing any of them
 - **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored
 - **Full-text search** — search note bodies and tags. Whitespace-separated terms must all match (AND), case is ignored, and Japanese matches by substring without word segmentation
+- **Edit history** — list past versions, compare them with the current text, and restore any of them. The content from before a restore stays in the history
 - **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note plus `notes.json` with tags and dates)
 - **Works offline** — notes are also stored in the device's IndexedDB and sync automatically on reconnect
 
@@ -77,6 +78,7 @@ notes.example.com {
 | `AUTH_TOKEN` | (required) | Shared token used by clients. At least 16 characters |
 | `PORT` | `8080` | Port to listen on |
 | `DATA_DIR` | `/data` | Where the SQLite database is stored |
+| `HISTORY_INTERVAL_MINUTES` | `10` | Consecutive edits within this time are folded into one history version |
 | `STATIC_DIR` | `/app/client/dist` | Web client to serve |
 
 ## API
@@ -88,6 +90,8 @@ notes.example.com {
 | `GET /api/health` | Health check |
 | `GET /api/notes` | Note list (title, tags, creation date, update date, trash flag) |
 | `GET /api/search?q=...` | Full-text search. Returns IDs and excerpts of matching notes, newest first |
+| `GET /api/notes/:id/versions` | The note's history versions |
+| `GET /api/notes/:id/versions/:versionId` | One version's body and tags |
 | `GET /api/notes/:id.txt` | One note as text |
 | `GET /api/export.zip` | All notes as a zip (`?trash=1` includes the trash) |
 | `WS /sync` | Yjs sync (Hocuspocus protocol) |
@@ -107,7 +111,7 @@ See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
 - Native apps (wrapping the PWA with Tauri / Capacitor)
 - Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
-- Browsing and restoring history, emptying the trash
+- Emptying the trash, a retention period for history
 - Importing from Simplenote
 
 ## License

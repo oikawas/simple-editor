@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Viewing and restoring edit history. The server records a version of the body and tags on every store (folding consecutive edits within 10 minutes into one), and "History" in the editor lists the versions, shows a diff against the current text or the full text, and restores any of them. A restore syncs to other devices, and the content from before it stays in the history
+- `GET /api/notes/<id>/versions` and `GET /api/notes/<id>/versions/<version id>` APIs, and the `HISTORY_INTERVAL_MINUTES` environment variable
+- Creating each note's first version on startup for databases created before history existed
+
 - Full-text search over note bodies and tags: AND across multiple terms, case-insensitive, and substring matching for Japanese (including one- and two-character terms). Matches are highlighted in the list along with an excerpt of the body
 - `GET /api/search` API
 - Building the search index on startup for databases created before search existed

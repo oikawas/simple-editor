@@ -30,6 +30,7 @@ server/   Node.js + Hocuspocus (Yjs sync server) + SQLite. Also serves the web c
 client/   Web client (TypeScript + CodeMirror 6), installable as a PWA
 core/     Shared core for the native apps (Rust): sync, networking, on-device storage; used from Swift and Kotlin through UniFFI
 linux/    The Linux app (Rust + GTK4 / libadwaita)
+apple/    The macOS and iOS app (SwiftUI) and the core's Swift package
 Caddyfile HTTPS on the LAN (local CA), used by Caddy in compose
 ```
 
@@ -112,6 +113,25 @@ install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/
 - The device token is kept in the desktop keyring (GNOME Keyring and the like, via Secret Service). Without one, it goes to `~/.config/simple-editor/device-token`, readable only by you
 - Notes are also kept in `~/.local/share/simple-editor`, so they can be read and edited offline
 
+## macOS and iOS app (SwiftUI)
+
+Built on a Mac with Xcode. It runs on macOS 15 or later and iOS 18 or later.
+
+Requirements: Xcode 16 or later, Rust (rustup), and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+
+```sh
+./apple/build-xcframework.sh          # builds the Rust core for macOS and iOS (a few minutes the first time)
+cd apple
+DEVELOPMENT_TEAM=<team ID> xcodegen generate
+open SimpleEditor.xcodeproj           # pick SimpleEditor-macOS or SimpleEditor-iOS and run
+```
+
+- Your team ID is on the Membership page of your Apple Developer account. Without it, choose the team under Signing & Capabilities in Xcode
+- Run `build-xcframework.sh` again after changing the core
+- On iPhone, install the server's root certificate first ("Preparing each device" above). Allow access to the local network when asked on first launch
+- The device token is kept in the Keychain. Notes are also kept in the app's data, so they can be read and edited offline
+- The UI-independent part (`SimpleEditorModel` in `apple/SimpleEditorCore`) can be tested with `swift test` on a Mac or on Linux. With `SIMPLE_EDITOR_TEST_SERVER` (server URL) and `SIMPLE_EDITOR_TEST_TOKEN` (registration token) set, it drives two devices against a real server. On Linux, run `./apple/generate-bindings.sh` first
+
 ## Settings (`.env`)
 
 | Name | Default | Description |
@@ -162,7 +182,7 @@ See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
 ## Possible next steps
 
-- Native apps (SwiftUI for macOS and iOS, then Android)
+- An Android app
 - Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
 - Emptying the trash, a retention period for history
 - Importing from Simplenote

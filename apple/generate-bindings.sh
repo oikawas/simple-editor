@@ -19,6 +19,8 @@ cargo run "${FLAGS[@]}" -q -p simple-editor-core --features bindgen --bin uniffi
   generate --library "$LIB" --language swift --out-dir "$OUT"
 
 PKG="apple/SimpleEditorCore"
+# The directories hold only generated files, so a fresh clone lacks them.
+mkdir -p "$PKG/Sources/SimpleEditorCore" "$PKG/Sources/simple_editor_coreFFI"
 cp "$OUT/simple_editor_core.swift" "$PKG/Sources/SimpleEditorCore/SimpleEditorCore.swift"
 cp "$OUT/simple_editor_coreFFI.h" "$PKG/Sources/simple_editor_coreFFI/simple_editor_coreFFI.h"
 echo "Swift bindings written to $PKG"

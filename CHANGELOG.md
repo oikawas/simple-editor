@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Per-device tokens. `AUTH_TOKEN` now registers devices, and each registered device gets its own token (the server stores only a hash). The settings list registered devices and can rename this device or revoke any device; a revoked device is disconnected at once
+- Limiting authentication attempts: an address with repeated failures is locked out for a while (`AUTH_MAX_FAILURES`, `AUTH_WINDOW_MINUTES`, `AUTH_LOCKOUT_MINUTES`)
+- APIs: `POST /api/devices`, `GET /api/devices`, `PATCH /api/devices/current`, `DELETE /api/devices/<id>`
+- A shared core for the native apps (Rust, `core/`): Yjs-compatible sync, on-device storage, and the server API, usable from Swift and Kotlin through UniFFI
+
 - HTTPS within the LAN. Compose adds Caddy, which issues certificates from its own local certificate authority (CA); each device trusts the root certificate downloaded from `http://<server>/ca.crt`. Connections by IP address (without SNI) are supported
 - `.env` settings `SERVER_IP`, `SERVER_NAMES`, `BIND_ADDRESS`, `HTTP_PORT`, and `HTTPS_PORT`
 
@@ -33,6 +38,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- `AUTH_TOKEN` no longer reads or writes notes. An existing web app registers itself with its stored `AUTH_TOKEN` the next time it opens and switches to a device token
+- A web app whose token is refused stops reconnecting and asks to be registered again
 - The premise is now that devices connect to the server from the same LAN. Reaching it from outside (a VPN or similar) is out of scope, and the README's instructions for exposing it through Tailscale or a reverse proxy were removed
 - The app container no longer publishes a host port; it is reachable only through Caddy
 

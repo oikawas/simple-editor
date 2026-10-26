@@ -11,9 +11,12 @@ Provide a plain-text notes app that replaces Simplenote and runs on a home serve
 | Area | Target |
 | --- | --- |
 | Server | Docker Compose on Ubuntu (two containers, the app and Caddy; linux/amd64, linux/arm64) |
-| Clients | macOS (Apple Silicon / Intel), iPhone, Android |
+| Clients | macOS (Apple Silicon / Intel), iPhone, Android, Linux |
 
-The client is a single web app (PWA), installed to the home screen or Dock from each platform's browser.
+There are two kinds of client:
+
+- **Web app (PWA)** — one codebase for every platform, installed to the home screen or Dock from the browser
+- **Native apps** — sync, networking, and on-device storage live in a shared Rust core (section 4.4), and only the UI is written natively for each platform: Linux (GTK4), then macOS and iOS (SwiftUI), then Android
 
 ### 2.1 Network assumptions
 
@@ -96,14 +99,23 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 - File names are the title with characters not allowed in file names replaced by `_`, cut to 80 characters. An empty title becomes `untitled`; duplicates get a number such as ` (2)`
 - Notes in the trash are left out (the API includes them with `?trash=1`)
 
-### 3.10 Settings and authentication
+### 3.10 Device registration and authentication
 
-- On first launch the settings dialog opens and asks for:
-  - Server URL (defaults to the URL the app was opened from)
-  - Access token (the same value as the server's `AUTH_TOKEN`)
-  - Device name (shown with this device's cursor on other devices; defaults to a guess such as iPhone / iPad / Android / Mac)
-- Settings are stored in the device's localStorage
-- A single user is assumed, with one shared token for the whole server
+- The server's `AUTH_TOKEN` is the **registration token**, used only to register new devices. It cannot read or write notes
+- A new device registers once by entering the server URL, a device name, and the registration token. The server issues the device its own **device token**, which is used for everything from then on. The registration token is not stored on the device
+- The device name is shown in the list of registered devices and with this device's cursor on other devices. It defaults to a guess such as iPhone / iPad / Android / Mac and can be changed after registering
+- The settings list the registered devices (name, last seen, registered) and can revoke any of them. A revoked device stops syncing immediately and has to register again to be used
+- A device whose token is refused (because it was revoked) stops reconnecting and asks to be registered again
+- An address with repeated authentication failures is refused for a while (section 3.11)
+- Before device tokens, the web app stored the registration token. Such a device registers itself with that token on startup, replaces it with a device token, and deletes it
+
+### 3.11 Limiting authentication attempts
+
+- Authentication failures (an invalid token, a wrong registration token) are counted per client IP address
+- When the failures within a window (15 minutes by default, `AUTH_WINDOW_MINUTES`) reach the limit (10 by default, `AUTH_MAX_FAILURES`), every authentication from that address is refused for a while (15 minutes by default, `AUTH_LOCKOUT_MINUTES`), valid tokens included; otherwise guessing could continue
+- While refused, HTTP responses are 429 with `Retry-After`, and sync is refused with the reason `rate-limited`. Clients wait before reconnecting
+- A successful authentication resets the address's failure count
+- Behind Caddy, the client address is the last value of the `X-Forwarded-For` header Caddy adds (`TRUST_PROXY=1`). Caddy replaces any value the client sent, so the limit cannot be dodged by forging it
 
 ## 4. Architecture
 
@@ -151,13 +163,24 @@ The client is a single web app (PWA), installed to the home screen or Dock from 
 - Plain HTTP (port 80) only serves the root certificate (`/ca.crt`) and redirects to HTTPS
 - On-device data (settings, the cached list, unsent edits) is kept per URL. If the server's IP address (or name) changes, devices treat the app as a different one, so the IP should be fixed (for example, a DHCP reservation on the router)
 
-### 4.3 Client
+### 4.3 Web client
 
 - TypeScript (no framework), built with Vite. The editor is CodeMirror 6
 - Only one WebSocket is opened; the open notes and `__index` are multiplexed over it
 - The list is fetched again with `GET /api/notes` when `__index` reports a change or the connection is re-established
 - A service worker (Workbox) caches the app shell so it starts offline. Updates apply automatically
 - At 720px wide or less, the list and the editor are shown one at a time. Supports iPhone safe areas and dark mode
+
+### 4.4 Shared core for the native clients (Rust)
+
+- Everything in the native apps except the UI (sync, server communication, on-device storage) is a Rust library, `core/`. UniFFI generates Swift and Kotlin APIs that each UI calls
+- The CRDT is yrs (the Rust implementation of Yjs), so the data format and protocol match the server and web app and they sync with each other. Text positions count UTF-16 units, matching Swift, Kotlin, and JavaScript strings
+- One WebSocket carries all open notes and `__index` (the Hocuspocus v4 protocol). A light message every 25 seconds avoids the server's 60-second idle cut-off, and the connection is replaced if nothing arrives for 55 seconds
+- Reconnects back off from 1 to 30 seconds, doubling each time. A refused device token stops reconnecting; hitting the attempt limit waits 60 seconds
+- SQLite on the device keeps each note's Yjs state, the notes with unsent changes, and the last fetched list. Notes with unsent changes are reopened on startup and sent once connected
+- TLS is verified with the operating system's certificate store (rustls-platform-verifier), so the local CA's root certificate installed on the device is honored
+- Each app stores the device token in the OS's secure storage (the Keychain and the like) and hands it to the core on startup
+- Tests run the real server and check sync between Rust clients, interoperation with a JavaScript client built on the web app's libraries, offline edits being sent later, and device revocation
 
 ## 5. Data model
 
@@ -183,15 +206,16 @@ Tags are a map rather than an array so that concurrent additions and removals on
 | `notes(id, title, preview, tags, created_at, updated_at, deleted)` | List summaries, derived from `documents` |
 | `notes_fts(id, body, tags)` | Full-text index (FTS5 with the trigram tokenizer), derived from `documents` |
 | `versions(id, note_id, started_at, saved_at, body, tags, restore_mark)` | History versions. `started_at` is when the version was created, `saved_at` when it was last updated. `restore_mark` is the `restoredAt` at recording time; a change in it starts a new version |
+| `devices(id, name, token_hash, created_at, last_seen_at)` | Registered devices. Only a SHA-256 hash of each device token is stored. `last_seen_at` is updated on successful authentication (at most once a minute) |
 
 The journal mode is WAL.
 
-### 5.3 Client
+### 5.3 Web client
 
 | Storage | Contents |
 | --- | --- |
 | IndexedDB (one per note) | The note's Yjs state |
-| localStorage `simple-editor:settings` | Server URL, token, device name |
+| localStorage `simple-editor:settings` | Server URL, device token, device ID, device name |
 | localStorage `simple-editor:notes` | Cached list |
 | localStorage `simple-editor:pending` | IDs of notes with unsent changes |
 
@@ -205,22 +229,30 @@ The journal mode is WAL.
 
 ## 7. API
 
-Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A failed authentication returns 401; methods other than GET return 405.
+Everything except `/api/health` and device registration requires `Authorization: Bearer <device token>`. A failed authentication returns 401, a refused address 429 (with `Retry-After`), and an unsupported method 405.
 
 | Method and path | Response |
 | --- | --- |
 | `GET /api/health` | `{"ok": true}` |
+| `POST /api/devices` | Registers a device. `Authorization: Bearer <registration token>`, body `{name}`. Returns `{id, name, createdAt, lastSeenAt, token}`; `token` is returned only here |
+| `GET /api/devices` | Registered devices: array of `{id, name, createdAt, lastSeenAt, current}` (`current` marks the requesting device) |
+| `PATCH /api/devices/current` | Renames the requesting device. Body `{name}` |
+| `DELETE /api/devices/<device id>` | Revokes a device and closes its WebSockets |
 | `GET /api/notes` | Array of note summaries (`id`, `title`, `preview`, `tags`, `createdAt`, `updatedAt`, `deleted`), newest first |
 | `GET /api/search?q=<terms>` | Array of `{id, snippet}`, newest first, up to 200 |
 | `GET /api/notes/<id>/versions` | The note's versions: array of `{id, savedAt, title, length}`, newest first |
 | `GET /api/notes/<id>/versions/<version id>` | One version: `{id, savedAt, body, tags}` |
 | `GET /api/notes/<id>.txt` | The body (`text/plain; charset=utf-8`, as an attachment) |
 | `GET /api/export.zip[?trash=1]` | Zip of all notes (section 3.9) |
-| WebSocket `/sync` | Yjs sync over the Hocuspocus protocol. The token is sent when connecting |
+| WebSocket `/sync` | Yjs sync over the Hocuspocus protocol. The device token is sent in each document's authentication message. Refusal reasons are `unauthorized` and `rate-limited` |
 
 ## 8. Security
 
-- The token must be at least 16 characters, checked at startup. Comparison is constant-time over SHA-256 hashes
+- The registration token must be at least 16 characters, checked at startup. Comparison is constant-time over SHA-256 hashes
+- Device tokens are 32 random bytes (starting with `sed_`). The server stores only their SHA-256 hashes and returns a token once, in the registration response
+- Notes require a device token; the registration token cannot read them. A leaked registration token alone does not expose notes (it can register new devices, so change `AUTH_TOKEN` if it leaks; registered devices keep working)
+- A revoked device's WebSockets are closed on the spot and its token is refused from then on
+- An address with repeated authentication failures is refused for a while (section 3.11)
 - WebSocket connections are refused unless the document name is `__index` or a well-formed `note:<id>`
 - Static file serving refuses paths that point outside the served directory
 - Traffic is encrypted with HTTPS by Caddy even within the LAN, so other machines on the same LAN cannot read the token or the notes
@@ -229,26 +261,29 @@ Everything except `/api/health` requires `Authorization: Bearer <AUTH_TOKEN>`. A
 - The local CA's private key is stored in `./caddy` on the server. Anyone holding it can forge certificates for any site that devices with the root certificate will trust, so it must not leave the server
 - The root certificate is downloaded over HTTP, so that first download is unprotected. Comparing the SHA-256 fingerprint shown on the device with the value on the server before installing is recommended
 - The app container starts as root, fixes the ownership of the data directory, then drops to a non-root user (`node`) to run the server
-- The token is stored in plain text in the device's localStorage, relying on the device's own protection (screen lock and the like)
+- The web app stores the device token in plain text in localStorage, relying on the device's own protection (screen lock and the like). Native apps use the OS's secure storage
 
 ## 9. Design principles
 
 - **Data at hand, in plain formats** — Everything fits on one home server in one SQLite file. Backups are a file copy, and exports are plain text anyone can read
 - **Sync without conflicts** — "Last save wins" or "keep a conflicted copy" approaches lose changes or call for manual merging when several devices edit at once or offline. Using a CRDT (Yjs), every device converges to the same content whatever order the changes arrive in
 - **Offline as the normal case** — Phones lose their connection all the time. Changes are saved on the device first and reliably sent to the server later
-- **One codebase for every device** — A single PWA is far less to maintain than native apps for macOS, iPhone, and Android. If native apps are needed later, the same web code is to be wrapped with Tauri or Capacitor
+- **One web codebase for every device** — A PWA covers every platform with a single codebase
+- **Native apps share a core and differ only in UI** — Sync, networking, and storage are a Rust core; each platform gets a native UI. Sync correctness is tested in one place, and each app can focus on how it feels
 - **Few dependencies** — No UI framework; proven building blocks (Yjs, Hocuspocus, CodeMirror, SQLite) are combined
 - **Self-contained on the LAN** — Nothing, certificates included, depends on services on the internet. Reaching the LAN from outside is left to whatever the user already has (a VPN or similar)
 - **Derived data can be rebuilt** — List summaries and the search index are derived from the Yjs state and can be rebuilt at any time
 - **Readable history, restore as an ordinary edit** — Reconstructing past points from Yjs's internal state means disabling garbage collection and growing storage. Versions are stored as plain body and tag text, readable as is and usable for export. Restoring is an ordinary edit that overwrites with the old content, so concurrent editing, offline use, and undo all keep working
-- **Built for one person** — No accounts or permissions, just one shared token. Multi-user use is future work
+- **A key per device** — The shared key only registers devices; day-to-day traffic uses each device's own token, so a lost device can be cut off on its own
+- **Built for one person** — No accounts or permissions; every registered device belongs to the same owner. Multi-user use is future work
 
 ## 10. Limitations
 
 - Offline full-text search covers only the open note
 - Permanent deletion is not implemented
 - Edit history is never deleted and keeps growing; no retention period or version limit is implemented
-- A single user (one shared token) is assumed
+- A single user is assumed; any registered device can revoke the others
+- The attempt limit is per IP address, so devices sharing an address (such as the same VPN exit) share the limit
 - The local CA's root certificate has to be installed on each device
 - Changing the server's IP address (or name) makes each device treat the app as a different one. Edits not yet sent at that point are lost
 - Body formatting (such as rendering Markdown) is not handled

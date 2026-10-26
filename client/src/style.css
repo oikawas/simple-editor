@@ -139,3 +139,14 @@ button:disabled { opacity: 0.5; cursor: default; }
   #editor-pane .bar button { padding: 6px 8px; }
   #editor-pane .bar .label { display: none; }
 }
+
+/* settings: registration and devices */
+dialog .message { background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+dialog h3 { font-size: 14px; margin: 16px 0 6px; }
+#device-list { max-height: 40dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+#device-list > div:not(.notice) { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+#device-list > div:last-child { border-bottom: 0; }
+#device-list > div > div { flex: 1; min-width: 0; }
+#device-list .title { font-size: 14px; font-weight: 600; }
+#device-list .preview { font-size: 12px; color: var(--muted); }
+.status[data-state="rate-limited"] { color: var(--danger); }

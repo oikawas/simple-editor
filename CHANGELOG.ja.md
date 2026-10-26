@@ -8,6 +8,11 @@
 
 ### 追加
 
+- 端末ごとのトークン。`AUTH_TOKEN` は端末の登録用になり、登録した端末にはそれぞれ専用のトークンを発行する（サーバーはハッシュだけを保存）。設定画面で登録済みの端末の一覧、端末名の変更、登録解除ができる。解除した端末の接続はその場で切る
+- 認証の試行回数の制限。失敗が続いた接続元を一定時間締め出す（`AUTH_MAX_FAILURES`、`AUTH_WINDOW_MINUTES`、`AUTH_LOCKOUT_MINUTES`）
+- API: `POST /api/devices`、`GET /api/devices`、`PATCH /api/devices/current`、`DELETE /api/devices/<id>`
+- ネイティブアプリ共通のコア（Rust、`core/`）。Yjs 互換の同期、端末内の保存、サーバーの API を、UniFFI で Swift・Kotlin から使えるようにする
+
 - LAN 内での HTTPS 接続。compose に Caddy を加え、独自の認証局（ローカル CA）で証明書を発行する。各端末は `http://<サーバー>/ca.crt` からルート証明書を入れて信頼させる。IP アドレスでの接続（SNI なし）にも対応
 - `.env` の設定項目 `SERVER_IP`、`SERVER_NAMES`、`BIND_ADDRESS`、`HTTP_PORT`、`HTTPS_PORT`
 
@@ -33,6 +38,8 @@
 
 ### 変更
 
+- `AUTH_TOKEN` ではノートを読み書きできなくなった。既存の Web アプリは、次に開いたときに保存済みの `AUTH_TOKEN` で自動的に端末登録し、端末トークンに置き換える
+- トークンが拒否された Web アプリは、再接続を繰り返さずに登録し直すよう案内する
 - 前提を「サーバーには同一 LAN 内の端末から接続する」に改めた。LAN の外からの経路（VPN など）は範囲外とし、README の Tailscale とリバースプロキシによる公開手順を削除した
 - アプリのコンテナはホストのポートに公開せず、Caddy からだけ届くようにした
 

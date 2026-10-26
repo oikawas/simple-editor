@@ -21,12 +21,14 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 - **Edit history** — list past versions, compare them with the current text, and restore any of them. The content from before a restore stays in the history
 - **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note plus `notes.json` with tags and dates)
 - **Works offline** — notes are also stored in the device's IndexedDB and sync automatically on reconnect
+- **Per-device registration** — each device receives its own token when it registers. A lost device can be revoked on its own from any other device. Addresses with repeated failed sign-ins are locked out for a while
 
 ## Layout
 
 ```
 server/   Node.js + Hocuspocus (Yjs sync server) + SQLite. Also serves the web client
 client/   Web client (TypeScript + CodeMirror 6), installable as a PWA
+core/     Shared core for the native apps (Rust): sync, networking, on-device storage; used from Swift and Kotlin through UniFFI
 Caddyfile HTTPS on the LAN (local CA), used by Caddy in compose
 ```
 
@@ -55,7 +57,7 @@ git clone https://github.com/oikawas/simple-editor.git
 cd simple-editor
 cp .env.example .env
 # Edit .env:
-#   AUTH_TOKEN … a random string, e.g. from openssl rand -hex 32
+#   AUTH_TOKEN … the device registration token, a random string, e.g. from openssl rand -hex 32
 #   SERVER_IP  … the server's LAN IP (e.g. 192.168.1.10)
 docker compose up -d --build
 ```
@@ -83,29 +85,40 @@ openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint 
 
 ### 2. Open the app
 
-Open `https://<SERVER_IP>/` and enter the `AUTH_TOKEN` from `.env` in the settings dialog. Then install it as a PWA as described in the table above.
+Open `https://<SERVER_IP>/`, enter a device name and the registration token (`AUTH_TOKEN` in `.env`) in the settings dialog, and press Register. Then install it as a PWA as described in the table above.
+
+- The registration token is used once to register and is not stored on the device. From then on the device uses a token issued to it
+- The settings (⚙︎) list the registered devices; you can rename this device and revoke others. If a device is lost, revoke it from another device
+- A web app set up before device tokens registers itself automatically the next time it opens
 
 ## Settings (`.env`)
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `AUTH_TOKEN` | (required) | Shared token used by clients. At least 16 characters |
+| `AUTH_TOKEN` | (required) | Device registration token, at least 16 characters. It cannot read notes. Change it if it leaks (registered devices keep working) |
 | `SERVER_IP` | (required) | The server's LAN IP. Covered by the certificate and used in the app's URL |
 | `SERVER_NAMES` | none | DNS names on the LAN (space-separated), added to the certificate |
 | `BIND_ADDRESS` | `0.0.0.0` | Host address to listen on. Set it to the LAN IP to listen on that interface only (ufw does not apply to ports Docker publishes) |
 | `HTTP_PORT` | `80` | Port for the certificate download and the redirect to HTTPS |
 | `HTTPS_PORT` | `443` | With a port other than 443, the URL becomes `https://<SERVER_IP>:<port>/` |
 | `HISTORY_INTERVAL_MINUTES` | `10` | Consecutive edits within this time are folded into one history version |
+| `AUTH_MAX_FAILURES` | `10` | Failed sign-ins after which an address is locked out |
+| `AUTH_WINDOW_MINUTES` | `15` | Period over which failures are counted |
+| `AUTH_LOCKOUT_MINUTES` | `15` | Lockout length; valid tokens are refused meanwhile too |
 
 When running the app directly without compose, `PORT` (default `8080`), `DATA_DIR`, and `STATIC_DIR` can also be set.
 
 ## API
 
-`Authorization: Bearer <AUTH_TOKEN>` is required (except for `/api/health`).
+`Authorization: Bearer <device token>` is required (except for `/api/health` and device registration).
 
 | Path | Description |
 | --- | --- |
 | `GET /api/health` | Health check |
+| `POST /api/devices` | Registers a device (requires the registration token) and returns its device token |
+| `GET /api/devices` | Registered devices |
+| `PATCH /api/devices/current` | Renames this device |
+| `DELETE /api/devices/:id` | Revokes a device |
 | `GET /api/notes` | Note list (title, tags, creation date, update date, trash flag) |
 | `GET /api/search?q=...` | Full-text search. Returns IDs and excerpts of matching notes, newest first |
 | `GET /api/notes/:id/versions` | The note's history versions |
@@ -121,13 +134,14 @@ npm install
 AUTH_TOKEN=dev-token-0123456789 npm run dev:server   # :8080
 npm run dev:client                                   # :5173 (forwards /api and /sync to :8080)
 npm test                                             # server integration tests
+npm run build -w server && (cd core && cargo test)   # core tests (they start the real server)
 ```
 
 See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
 ## Possible next steps
 
-- Native apps (wrapping the PWA with Tauri / Capacitor)
+- Native apps (UIs on the shared core: GTK4 for Linux, then SwiftUI for macOS and iOS, then Android)
 - Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
 - Emptying the trash, a retention period for history
 - Importing from Simplenote

@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { docName } from "./notes";
 import { syncUrl, type Settings } from "./settings";
 
-export type Status = "online" | "offline" | "connecting" | "unauthorized";
+export type Status = "online" | "offline" | "connecting" | "unauthorized" | "rate-limited";
 
 export interface OpenNote {
   id: string;
@@ -44,13 +44,18 @@ export class SyncClient {
   // The note shown in the editor; background flushing leaves it open.
   active: string | null = null;
 
+  // Set once the server refuses the token; reconnecting would only add failures.
+  private stopped = false;
+
   constructor(
     private settings: Settings,
     private onIndexChanged: () => void,
     private onStatus: (s: Status) => void,
+    private onAuthFailed: (reason: string) => void,
   ) {
     this.ws = new HocuspocusProviderWebsocket({ url: syncUrl(settings) });
     this.ws.on("status", ({ status }: { status: string }) => {
+      if (this.stopped) return;
       this.onStatus(status === "connected" ? "online" : status === "connecting" ? "connecting" : "offline");
       if (status === "connected") {
         this.onIndexChanged();
@@ -61,10 +66,10 @@ export class SyncClient {
     // a message on it whenever any note is stored.
     this.index = new HocuspocusProvider({
       name: "__index",
-      token: settings.token,
+      token: settings.deviceToken,
       websocketProvider: this.ws,
       onStateless: () => this.onIndexChanged(),
-      onAuthenticationFailed: () => this.onStatus("unauthorized"),
+      onAuthenticationFailed: ({ reason }: { reason: string }) => this.authFailed(reason),
     });
     this.index.attach();
 
@@ -74,7 +79,16 @@ export class SyncClient {
   }
 
   private goOffline = () => this.ws.disconnect();
-  private goOnline = () => void this.ws.connect();
+  private goOnline = () => {
+    if (!this.stopped) void this.ws.connect();
+  };
+
+  private authFailed(reason: string): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.ws.disconnect();
+    this.onAuthFailed(reason);
+  }
 
   async openNote(id: string): Promise<OpenNote> {
     const existing = this.open.get(id);
@@ -87,8 +101,9 @@ export class SyncClient {
     const provider = new HocuspocusProvider({
       name: docName(id),
       document: doc,
-      token: this.settings.token,
+      token: this.settings.deviceToken,
       websocketProvider: this.ws,
+      onAuthenticationFailed: ({ reason }: { reason: string }) => this.authFailed(reason),
     });
     doc.on("afterTransaction", (tr: Y.Transaction) => {
       if (tr.local && tr.changed.size > 0) setPending(id, true);

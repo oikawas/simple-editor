@@ -38,17 +38,24 @@
     </div>
 
     <dialog id="settings">
-      <form method="dialog">
+      <form>
         <h2>設定</h2>
-        <label>サーバー URL<input name="serverUrl" type="url" placeholder="https://notes.example.com" /></label>
-        <label>アクセストークン<input name="token" type="password" autocomplete="current-password" /></label>
+        <p id="settings-message" class="message" hidden></p>
+        <label>サーバー URL<input name="serverUrl" type="url" placeholder="https://192.168.1.10" /></label>
         <label>この端末の名前<input name="deviceName" placeholder="Mac" /></label>
-        <p class="hint">トークンはサーバーの AUTH_TOKEN と同じ値です。</p>
+        <div id="register-fields">
+          <label>登録用トークン<input name="registrationToken" type="password" autocomplete="off" /></label>
+          <p class="hint">サーバーの AUTH_TOKEN の値です。この端末を登録するために一度だけ使い、端末には保存しません。</p>
+        </div>
+        <section id="devices-section" hidden>
+          <h3>登録済みの端末</h3>
+          <div id="device-list"></div>
+        </section>
         <div class="row">
           <button type="button" id="export-all">すべて書き出し (.zip)</button>
           <span class="spacer"></span>
-          <button value="cancel">キャンセル</button>
-          <button value="save" class="primary">保存</button>
+          <button type="button" id="settings-cancel">閉じる</button>
+          <button type="submit" id="settings-save" class="primary">保存</button>
         </div>
       </form>
     </dialog>

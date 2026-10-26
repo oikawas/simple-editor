@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder, drawSelection } from "@codemirror/view";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
+import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { lineDiff, restoreVersion, type Version, type VersionInfo } from "./history";
 import { newId, normalizeTag, summarize, type NoteSummary } from "./notes";
 import { loadSettings, saveSettings, type Settings } from "./settings";
@@ -34,7 +35,16 @@ function saveCache(): void {
 }
 
 function authHeaders(): HeadersInit {
-  return { Authorization: `Bearer ${settings.token}` };
+  return { Authorization: `Bearer ${settings.deviceToken}` };
+}
+
+// Fetches from the API with this device's token. A refused token or a
+// lockout is reported once and stops further attempts.
+async function apiFetch(path: string): Promise<Response> {
+  const res = await fetch(`${settings.serverUrl}${path}`, { headers: authHeaders() });
+  if (res.status === 401) authFailed("unauthorized");
+  if (res.status === 429) authFailed("rate-limited", Number(res.headers.get("retry-after") ?? 60));
+  return res;
 }
 
 // ---- note list -------------------------------------------------------------
@@ -46,10 +56,9 @@ function scheduleRefresh(): void {
 }
 
 async function refreshList(): Promise<void> {
-  if (!settings.token) return;
+  if (!settings.deviceToken) return;
   try {
-    const res = await fetch(`${settings.serverUrl}/api/notes`, { headers: authHeaders() });
-    if (res.status === 401) return setStatus("unauthorized");
+    const res = await apiFetch("/api/notes");
     if (!res.ok) return;
     const server: NoteSummary[] = await res.json();
     const next = new Map(server.map((n) => [n.id, n]));
@@ -87,14 +96,12 @@ function scheduleSearch(): void {
 
 async function runSearch(): Promise<void> {
   const query = searchQuery();
-  if (!query || !settings.token) {
+  if (!query || !settings.deviceToken) {
     searchResults = null;
     return renderList();
   }
   try {
-    const res = await fetch(`${settings.serverUrl}/api/search?q=${encodeURIComponent(query)}`, {
-      headers: authHeaders(),
-    });
+    const res = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
     if (!res.ok) throw new Error(String(res.status));
     const hits: { id: string; snippet: string }[] = await res.json();
     if (query !== searchQuery()) return; // a newer search is on its way
@@ -341,45 +348,204 @@ function safeFileName(title: string): string {
 function setStatus(s: Status): void {
   const el = $("status");
   el.dataset.state = s;
-  el.textContent = { online: "同期中", offline: "オフライン", connecting: "接続中…", unauthorized: "認証エラー" }[s];
+  el.textContent = {
+    online: "同期中",
+    offline: "オフライン",
+    connecting: "接続中…",
+    unauthorized: "未登録",
+    "rate-limited": "一時停止中",
+  }[s];
 }
 
+let retryTimer: number | undefined;
+
 function connect(): void {
+  clearTimeout(retryTimer);
   closeCurrent();
   sync?.destroy();
   sync = null;
-  if (!settings.token) {
+  if (!settings.deviceToken) {
+    if (settings.legacyToken) return void migrate();
     setStatus("unauthorized");
     openSettings();
     return;
   }
-  sync = new SyncClient(settings, scheduleRefresh, setStatus);
+  sync = new SyncClient(settings, scheduleRefresh, setStatus, (reason) =>
+    authFailed(reason === "rate-limited" ? "rate-limited" : "unauthorized"),
+  );
 }
 
-function openSettings(): void {
-  const dialog = $<HTMLDialogElement>("settings");
-  const form = dialog.querySelector("form")!;
-  (form.elements.namedItem("serverUrl") as HTMLInputElement).value = settings.serverUrl;
-  (form.elements.namedItem("token") as HTMLInputElement).value = settings.token;
-  (form.elements.namedItem("deviceName") as HTMLInputElement).value = settings.deviceName;
-  dialog.showModal();
+// The server refused this device's token (revoked or unknown), or locked
+// this address out after repeated failures.
+function authFailed(kind: "unauthorized" | "rate-limited", retryAfterSeconds = 60): void {
+  if (!sync && kind === "rate-limited" && retryTimer) return;
+  closeCurrent();
+  sync?.destroy();
+  sync = null;
+  if (kind === "rate-limited") {
+    setStatus("rate-limited");
+    clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(connect, Math.max(retryAfterSeconds, 5) * 1000);
+    return;
+  }
+  if (!settings.deviceToken) return;
+  settings = { ...settings, deviceToken: "", deviceId: "" };
+  saveSettings(settings);
+  setStatus("unauthorized");
+  openSettings("この端末の登録が解除されたか、無効になっています。登録用トークンで登録し直してください。");
 }
 
-$("settings").addEventListener("close", () => {
+// Devices set up before per-device tokens stored the registration token;
+// exchange it for a device token of their own.
+async function migrate(): Promise<void> {
+  try {
+    const device = await registerDevice(settings.serverUrl, settings.legacyToken, settings.deviceName);
+    settings = { ...settings, deviceToken: device.token, deviceId: device.id, legacyToken: "" };
+    saveSettings(settings);
+    connect();
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      settings = { ...settings, legacyToken: "" };
+      saveSettings(settings);
+      setStatus("unauthorized");
+      openSettings("保存されていたトークンでは登録できませんでした。登録用トークンを入力してください。");
+    } else if (e instanceof ApiError && e.status === 429) {
+      setStatus("rate-limited");
+      retryTimer = window.setTimeout(connect, Math.max(e.retryAfter, 5) * 1000);
+    } else {
+      // Offline: keep the stored token and try again later.
+      setStatus("offline");
+      retryTimer = window.setTimeout(connect, 30_000);
+    }
+  }
+}
+
+// ---- settings and devices --------------------------------------------------
+
+const settingsForm = () => $("settings").querySelector("form")!;
+const field = (name: string) => settingsForm().elements.namedItem(name) as HTMLInputElement;
+
+function needsRegistration(): boolean {
+  const url = field("serverUrl").value.trim().replace(/\/+$/, "") || location.origin;
+  return !settings.deviceToken || url !== settings.serverUrl;
+}
+
+function showSettingsMessage(text: string): void {
+  const el = $("settings-message");
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+function openSettings(message = ""): void {
   const dialog = $<HTMLDialogElement>("settings");
-  if (dialog.returnValue !== "save") return;
-  const form = dialog.querySelector("form")!;
-  const next = {
-    serverUrl: (form.elements.namedItem("serverUrl") as HTMLInputElement).value.trim() || location.origin,
-    token: (form.elements.namedItem("token") as HTMLInputElement).value.trim(),
-    deviceName: (form.elements.namedItem("deviceName") as HTMLInputElement).value.trim(),
-  };
-  saveSettings(next);
-  settings = loadSettings();
-  connect();
+  field("serverUrl").value = settings.serverUrl;
+  field("deviceName").value = settings.deviceName;
+  field("registrationToken").value = "";
+  showSettingsMessage(message);
+  updateSettingsForm();
+  if (!dialog.open) dialog.showModal();
+  if (settings.deviceToken) void renderDevices();
+}
+
+function updateSettingsForm(): void {
+  const register = needsRegistration();
+  $("register-fields").hidden = !register;
+  field("registrationToken").required = register;
+  $("devices-section").hidden = register;
+  $("export-all").hidden = !settings.deviceToken;
+  $("settings-save").textContent = register ? "登録" : "保存";
+}
+
+function describeError(e: unknown): string {
+  if (e instanceof ApiError && e.status === 401) return "登録用トークンが違います。";
+  if (e instanceof ApiError && e.status === 429) {
+    return `失敗が続いたため、一時的に受け付けを停止しています。${Math.ceil(e.retryAfter / 60)} 分ほど待ってから試してください。`;
+  }
+  if (e instanceof ApiError) return `サーバーでエラーが発生しました (${e.status})。`;
+  return "サーバーに接続できません。URL とネットワークを確認してください。";
+}
+
+async function renderDevices(): Promise<void> {
+  const list = $("device-list");
+  list.replaceChildren(notice("読み込み中…"));
+  try {
+    const devices = await listDevices(settings.serverUrl, settings.deviceToken);
+    list.replaceChildren(
+      ...devices.map((d) => {
+        const li = document.createElement("div");
+        const info = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "title";
+        name.textContent = d.current ? `${d.name}（この端末）` : d.name;
+        const dates = document.createElement("div");
+        dates.className = "preview";
+        dates.textContent = `最終接続 ${formatDate(d.lastSeenAt)} · 登録 ${formatDate(d.createdAt)}`;
+        info.append(name, dates);
+        const revoke = document.createElement("button");
+        revoke.type = "button";
+        revoke.textContent = "登録解除";
+        revoke.onclick = () => void revokeFromSettings(d.id, d.name, d.current);
+        li.append(info, revoke);
+        return li;
+      }),
+    );
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) return authFailed("unauthorized");
+    list.replaceChildren(notice(describeError(e)));
+  }
+}
+
+async function revokeFromSettings(id: string, name: string, current: boolean): Promise<void> {
+  const question = current
+    ? "この端末の登録を解除しますか？ もう一度使うには登録用トークンが必要です。"
+    : `「${name}」の登録を解除しますか？ その端末はすぐに同期できなくなります。`;
+  if (!confirm(question)) return;
+  try {
+    await revokeDevice(settings.serverUrl, settings.deviceToken, id);
+  } catch (e) {
+    showSettingsMessage(describeError(e));
+    return;
+  }
+  if (current) {
+    authFailed("unauthorized");
+    openSettings("この端末の登録を解除しました。");
+  } else {
+    void renderDevices();
+  }
+}
+
+settingsForm().addEventListener("input", (e) => {
+  if ((e.target as HTMLElement).getAttribute("name") === "serverUrl") updateSettingsForm();
 });
 
-$("open-settings").onclick = openSettings;
+settingsForm().addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const serverUrl = field("serverUrl").value.trim().replace(/\/+$/, "") || location.origin;
+  const deviceName = field("deviceName").value.trim() || settings.deviceName;
+  const save = $<HTMLButtonElement>("settings-save");
+  save.disabled = true;
+  try {
+    if (needsRegistration()) {
+      const device = await registerDevice(serverUrl, field("registrationToken").value.trim(), deviceName);
+      settings = { serverUrl, deviceName, deviceToken: device.token, deviceId: device.id, legacyToken: "" };
+      saveSettings(settings);
+      connect();
+    } else if (deviceName !== settings.deviceName) {
+      await renameThisDevice(settings.serverUrl, settings.deviceToken, deviceName);
+      settings = { ...settings, deviceName };
+      saveSettings(settings);
+    }
+    $<HTMLDialogElement>("settings").close();
+  } catch (err) {
+    showSettingsMessage(describeError(err));
+  } finally {
+    save.disabled = false;
+  }
+});
+
+$("settings-cancel").onclick = () => $<HTMLDialogElement>("settings").close();
+
+$("open-settings").onclick = () => openSettings();
 $("search").oninput = () => {
   renderList();
   scheduleSearch();
@@ -412,7 +578,7 @@ async function openHistory(): Promise<void> {
 
   let versions: VersionInfo[];
   try {
-    const res = await fetch(`${settings.serverUrl}/api/notes/${id}/versions`, { headers: authHeaders() });
+    const res = await apiFetch(`/api/notes/${id}/versions`);
     if (!res.ok) throw new Error(String(res.status));
     versions = await res.json();
   } catch {
@@ -447,9 +613,7 @@ async function openHistory(): Promise<void> {
 async function showVersion(noteId: string, versionId: number): Promise<void> {
   const request = ++versionRequest;
   try {
-    const res = await fetch(`${settings.serverUrl}/api/notes/${noteId}/versions/${versionId}`, {
-      headers: authHeaders(),
-    });
+    const res = await apiFetch(`/api/notes/${noteId}/versions/${versionId}`);
     if (!res.ok) throw new Error(String(res.status));
     const version: Version = await res.json();
     if (request !== versionRequest) return;
@@ -536,7 +700,7 @@ $("export-note").onclick = () => {
 
 $("export-all").onclick = async () => {
   try {
-    const res = await fetch(`${settings.serverUrl}/api/export.zip`, { headers: authHeaders() });
+    const res = await apiFetch("/api/export.zip");
     if (!res.ok) throw new Error(String(res.status));
     const stamp = new Date().toISOString().slice(0, 10);
     downloadBlob(await res.blob(), `notes-${stamp}.zip`);

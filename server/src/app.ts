@@ -74,11 +74,13 @@ export function createApp(config: Config) {
     return null;
   }
 
-  // Ends the sync connections a device has open, e.g. once it is revoked.
+  // Closes the WebSockets a device has open, e.g. once it is revoked. Closing
+  // the socket (not just its documents) makes clients reconnect, and the
+  // refused token then tells them they were revoked.
   function disconnectDevice(deviceId: string): void {
     for (const doc of server.hocuspocus.documents.values()) {
       for (const connection of doc.getConnections()) {
-        if (connection.context?.deviceId === deviceId) connection.close({ code: 4401, reason: "unauthorized" });
+        if (connection.context?.deviceId === deviceId) connection.webSocket.close(4401, "unauthorized");
       }
     }
   }

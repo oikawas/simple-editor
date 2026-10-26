@@ -1,7 +1,12 @@
 export interface Settings {
   serverUrl: string;
-  token: string;
+  // This device's own token, issued at registration. Empty until registered.
+  deviceToken: string;
+  deviceId: string;
   deviceName: string;
+  // Before per-device tokens the registration token itself was stored here;
+  // it is exchanged for a device token on startup and then dropped.
+  legacyToken: string;
 }
 
 function defaultDeviceName(): string {
@@ -16,20 +21,26 @@ function defaultDeviceName(): string {
 const KEY = "simple-editor:settings";
 
 export function loadSettings(): Settings {
+  let s: Record<string, string> = {};
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? "{}");
-    return {
-      serverUrl: s.serverUrl || location.origin,
-      token: s.token ?? "",
-      deviceName: s.deviceName || defaultDeviceName(),
-    };
+    s = JSON.parse(localStorage.getItem(KEY) ?? "{}");
   } catch {
-    return { serverUrl: location.origin, token: "", deviceName: defaultDeviceName() };
+    // Unreadable settings: start over.
   }
+  return {
+    serverUrl: s.serverUrl || location.origin,
+    deviceToken: s.deviceToken ?? "",
+    deviceId: s.deviceId ?? "",
+    deviceName: s.deviceName || defaultDeviceName(),
+    legacyToken: s.deviceToken ? "" : (s.token ?? ""),
+  };
 }
 
 export function saveSettings(s: Settings): void {
-  localStorage.setItem(KEY, JSON.stringify({ ...s, serverUrl: s.serverUrl.replace(/\/+$/, "") }));
+  const { legacyToken, ...rest } = s;
+  const stored: Record<string, string> = { ...rest, serverUrl: s.serverUrl.replace(/\/+$/, "") };
+  if (legacyToken) stored.token = legacyToken;
+  localStorage.setItem(KEY, JSON.stringify(stored));
 }
 
 export function syncUrl(s: Settings): string {

@@ -171,6 +171,11 @@ impl Client {
         Ok(notes)
     }
 
+    /// Notes with changes the server has not acknowledged yet.
+    pub fn pending_note_ids(&self) -> Vec<String> {
+        self.store.pending().unwrap_or_default()
+    }
+
     /// The last fetched note list, for showing something before `notes()` returns.
     pub fn cached_notes(&self) -> Result<Vec<NoteSummary>, CoreError> {
         self.store.cached_notes()
@@ -229,11 +234,6 @@ impl Client {
 }
 
 impl Client {
-    /// Notes with changes the server has not acknowledged yet.
-    pub fn notes_pending_for_test(&self) -> Vec<String> {
-        self.store.pending().unwrap_or_default()
-    }
-
     fn api(&self) -> Api {
         self.api.read().unwrap().clone()
     }

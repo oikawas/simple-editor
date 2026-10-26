@@ -199,7 +199,7 @@ async fn interoperates_with_the_javascript_client() {
     note.set_body("From Rust 日本語".into());
     note.add_tag("仕事".into());
     let id = note.id();
-    until("acknowledged", || a.client.notes_pending_for_test().is_empty()).await;
+    until("acknowledged", || a.client.pending_note_ids().is_empty()).await;
 
     let seen = js_peer(&server, &a.token, &id, " + from JS");
     assert_eq!(seen["body"], "From Rust 日本語");
@@ -215,20 +215,20 @@ async fn offline_edits_are_sent_after_reconnecting() {
     let note = a.client.create_note().unwrap();
     note.set_body("before".into());
     let id = note.id();
-    until("acknowledged", || a.client.notes_pending_for_test().is_empty()).await;
+    until("acknowledged", || a.client.pending_note_ids().is_empty()).await;
 
     server.stop();
     until("offline", || a.events.last_status() == Some(SyncStatus::Offline)).await;
     note.set_body("before, and written offline".into());
     let created_offline = a.client.create_note().unwrap();
     created_offline.set_body("new while offline".into());
-    until("pending recorded", || a.client.notes_pending_for_test().len() == 2).await;
+    until("pending recorded", || a.client.pending_note_ids().len() == 2).await;
     // Offline, the list still shows everything this device has.
     let titles: Vec<String> = a.client.notes().await.unwrap().into_iter().map(|n| n.title).collect();
     assert!(titles.contains(&"new while offline".to_string()));
 
     server.restart();
-    until("pending sent", || a.client.notes_pending_for_test().is_empty()).await;
+    until("pending sent", || a.client.pending_note_ids().is_empty()).await;
     let seen = js_peer(&server, &a.token, &id, "");
     assert_eq!(seen["body"], "before, and written offline");
     let seen = js_peer(&server, &a.token, &created_offline.id(), "");

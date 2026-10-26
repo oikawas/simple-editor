@@ -56,6 +56,27 @@ export interface Version {
   tags: string[];
 }
 
+export interface Device {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+interface DeviceRow {
+  id: string;
+  name: string;
+  created_at: number;
+  last_seen_at: number;
+}
+
+const toDevice = (r: DeviceRow): Device => ({
+  id: r.id,
+  name: r.name,
+  createdAt: r.created_at,
+  lastSeenAt: r.last_seen_at,
+});
+
 export class Store {
   private db: Database.Database;
 
@@ -90,6 +111,14 @@ export class Store {
         restore_mark INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS versions_note ON versions (note_id, id);
+      -- Registered devices. Only a hash of each device's token is kept.
+      CREATE TABLE IF NOT EXISTS devices (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL
+      );
       CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
         id UNINDEXED, body, tags, tokenize = 'trigram'
       );
@@ -233,6 +262,35 @@ export class Store {
       .prepare("SELECT id, saved_at, body, tags FROM versions WHERE note_id = ? AND id = ?")
       .get(noteId, versionId) as { id: number; saved_at: number; body: string; tags: string } | undefined;
     return row ? { id: row.id, savedAt: row.saved_at, body: row.body, tags: JSON.parse(row.tags) } : null;
+  }
+
+  createDevice(id: string, name: string, tokenHash: string, now: number): Device {
+    this.db
+      .prepare("INSERT INTO devices (id, name, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?)")
+      .run(id, name, tokenHash, now, now);
+    return { id, name, createdAt: now, lastSeenAt: now };
+  }
+
+  findDeviceByTokenHash(tokenHash: string): Device | null {
+    const row = this.db.prepare("SELECT * FROM devices WHERE token_hash = ?").get(tokenHash) as DeviceRow | undefined;
+    return row ? toDevice(row) : null;
+  }
+
+  listDevices(): Device[] {
+    const rows = this.db.prepare("SELECT * FROM devices ORDER BY created_at").all() as DeviceRow[];
+    return rows.map(toDevice);
+  }
+
+  renameDevice(id: string, name: string): void {
+    this.db.prepare("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
+  }
+
+  touchDevice(id: string, now: number): void {
+    this.db.prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?").run(now, id);
+  }
+
+  deleteDevice(id: string): boolean {
+    return this.db.prepare("DELETE FROM devices WHERE id = ?").run(id).changes > 0;
   }
 
   close(): void {

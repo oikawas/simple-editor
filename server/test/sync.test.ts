@@ -7,18 +7,46 @@ import { after, before, test } from "node:test";
 import JSZip from "jszip";
 import * as Y from "yjs";
 import { createApp } from "../src/app.js";
+import { AuthLimiter, clientAddress } from "../src/auth.js";
+import type { Config } from "../src/config.js";
 import { Store } from "../src/db.js";
 
-const TOKEN = "test-token-0123456789";
+// The registration token; note data needs a device token obtained with it.
+const REGISTRATION_TOKEN = "test-token-0123456789";
+let TOKEN: string;
 let dataDir: string;
 let app: ReturnType<typeof createApp>;
 let base: string;
 
+function testConfig(dir: string, overrides: Partial<Config> = {}): Config {
+  return {
+    port: 0,
+    dataDir: dir,
+    authToken: REGISTRATION_TOKEN,
+    staticDir: null,
+    historyIntervalMs: 0,
+    trustProxy: false,
+    authMaxFailures: 1000,
+    authWindowMs: 60_000,
+    authLockoutMs: 60_000,
+    ...overrides,
+  };
+}
+
+async function register(host: string, name: string, token = REGISTRATION_TOKEN) {
+  return fetch(`http://${host}/api/devices`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-editor-"));
-  app = createApp({ port: 0, dataDir, authToken: TOKEN, staticDir: null, historyIntervalMs: 0 });
+  app = createApp(testConfig(dataDir));
   await app.server.listen(0);
   base = `127.0.0.1:${app.server.address.port}`;
+  TOKEN = (await (await register(base, "test runner")).json()).token;
 });
 
 after(async () => {
@@ -27,13 +55,13 @@ after(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
-function connect(name: string, token = TOKEN) {
+function connect(name: string, token = TOKEN, host = base) {
   const doc = new Y.Doc();
-  const websocketProvider = new HocuspocusProviderWebsocket({ url: `ws://${base}` });
+  const websocketProvider = new HocuspocusProviderWebsocket({ url: `ws://${host}` });
   const provider = new HocuspocusProvider({ name, document: doc, token, websocketProvider });
   const synced = new Promise<void>((resolve, reject) => {
     provider.on("synced", () => resolve());
-    provider.on("authenticationFailed", () => reject(new Error("auth failed")));
+    provider.on("authenticationFailed", ({ reason }: { reason: string }) => reject(new Error(reason)));
   });
   provider.attach();
   const close = () => {
@@ -52,15 +80,110 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000) {
   throw new Error("timed out");
 }
 
-function api(p: string, token = TOKEN) {
-  return fetch(`http://${base}${p}`, { headers: { Authorization: `Bearer ${token}` } });
+function api(p: string, token = TOKEN, init: RequestInit = {}, host = base) {
+  return fetch(`http://${host}${p}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
+  });
 }
 
 test("rejects a wrong token", async () => {
   const c = connect("note:abc", "wrong-token-xxxxxxxx");
-  await assert.rejects(c.synced);
+  await assert.rejects(c.synced, /unauthorized/);
   c.close();
   assert.equal((await api("/api/notes", "nope")).status, 401);
+});
+
+test("the registration token registers devices but cannot read notes", async () => {
+  assert.equal((await api("/api/notes", REGISTRATION_TOKEN)).status, 401);
+  const c = connect("note:abc", REGISTRATION_TOKEN);
+  await assert.rejects(c.synced, /unauthorized/);
+  c.close();
+  assert.equal((await register(base, "x", "wrong-token-xxxxxxxx")).status, 401);
+
+  const res = await register(base, "  iPhone  ");
+  assert.equal(res.status, 201);
+  const device = await res.json();
+  assert.equal(device.name, "iPhone");
+  assert.match(device.token, /^sed_[A-Za-z0-9_-]{43}$/);
+  assert.equal((await api("/api/notes", device.token)).status, 200);
+});
+
+test("lists, renames, and revokes devices", async () => {
+  const phone = await (await register(base, "phone")).json();
+  const c = connect("note:revoke-me", phone.token);
+  await c.synced;
+
+  const list = await (await api("/api/devices", phone.token)).json();
+  const me = list.find((d: { id: string }) => d.id === phone.id);
+  assert.equal(me.current, true);
+  assert.equal(list.filter((d: { current: boolean }) => d.current).length, 1);
+  assert.equal("token" in me || "tokenHash" in me || "token_hash" in me, false);
+
+  assert.equal((await api("/api/devices/current", phone.token, { method: "PATCH", body: '{"name":"my phone"}' })).status, 200);
+  const renamed = (await (await api("/api/devices")).json()).find((d: { id: string }) => d.id === phone.id);
+  assert.equal(renamed.name, "my phone");
+
+  // Revoking from another device cuts the phone off, including its open sync connection.
+  let closed = false;
+  c.provider.on("authenticationFailed", () => (closed = true));
+  c.provider.on("close", () => (closed = true));
+  assert.equal((await api(`/api/devices/${phone.id}`, TOKEN, { method: "DELETE" })).status, 200);
+  await until(() => closed);
+  c.close();
+  assert.equal((await api("/api/notes", phone.token)).status, 401);
+  assert.equal((await api(`/api/devices/${phone.id}`, TOKEN, { method: "DELETE" })).status, 404);
+});
+
+test("locks out an address after repeated failures, valid tokens included", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-editor-limit-"));
+  const limited = createApp(testConfig(dir, { authMaxFailures: 3 }));
+  await limited.server.listen(0);
+  const host = `127.0.0.1:${limited.server.address.port}`;
+  try {
+    const good = (await (await register(host, "ok")).json()).token;
+    assert.equal((await api("/api/notes", "bad-1", {}, host)).status, 401);
+    assert.equal((await api("/api/notes", "bad-2", {}, host)).status, 401);
+    const third = await api("/api/notes", "bad-3", {}, host);
+    assert.equal(third.status, 429);
+    assert.ok(Number(third.headers.get("retry-after")) > 0);
+
+    assert.equal((await api("/api/notes", good, {}, host)).status, 429);
+    assert.equal((await register(host, "x")).status, 429);
+    // The sync connection is keyed by the same address, so it is refused too.
+    const c = connect("note:abc", good, host);
+    await assert.rejects(c.synced, /rate-limited/);
+    c.close();
+    assert.ok(limited.limiter.retryAfter("127.0.0.1") > 0);
+  } finally {
+    await limited.server.destroy();
+    limited.store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lockouts expire and successes reset the count", () => {
+  let now = 0;
+  const limiter = new AuthLimiter(3, 1000, 5000, () => now);
+  limiter.fail("a");
+  limiter.fail("a");
+  limiter.succeed("a");
+  assert.equal(limiter.fail("a"), false); // count restarted
+  now = 2000;
+  limiter.fail("a");
+  assert.equal(limiter.fail("a"), false); // the first failure fell out of the window
+  assert.equal(limiter.fail("a"), true);
+  assert.equal(limiter.retryAfter("a"), 5000);
+  assert.equal(limiter.retryAfter("b"), 0);
+  now = 7000;
+  assert.equal(limiter.retryAfter("a"), 0);
+});
+
+test("takes the client address from the proxy only when trusted", () => {
+  assert.equal(clientAddress("203.0.113.9", "::ffff:10.0.0.2", false), "10.0.0.2");
+  assert.equal(clientAddress("1.1.1.1, 192.168.1.20", "172.18.0.3", true), "192.168.1.20");
+  assert.equal(clientAddress(null, "172.18.0.3", true), "172.18.0.3");
+  assert.equal(clientAddress(undefined, undefined, true), "unknown");
 });
 
 test("concurrent edits from two clients converge and persist", async () => {

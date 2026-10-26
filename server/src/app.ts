@@ -4,8 +4,9 @@ import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import * as Y from "yjs";
+import { AuthLimiter, clientAddress, hashToken, newDeviceToken, tokenMatches } from "./auth.js";
 import type { Config } from "./config.js";
-import { Store } from "./db.js";
+import { Store, type Device } from "./db.js";
 import { buildZip, fileNameFor } from "./export.js";
 import { INDEX_DOC, NOTE_PREFIX, bodyOf, noteIdFromDocName, restoreMarkOf, summarize } from "./note.js";
 
@@ -21,16 +22,66 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-export function tokenMatches(expected: string, given: string | null | undefined): boolean {
-  if (!given) return false;
-  const a = crypto.createHash("sha256").update(expected).digest();
-  const b = crypto.createHash("sha256").update(given).digest();
-  return crypto.timingSafeEqual(a, b);
+// Set on WebSocket upgrades so the address survives into the auth hook, which
+// only sees request headers. Any value the client sends is overwritten.
+const REMOTE_ADDR_HEADER = "x-simple-editor-remote-addr";
+
+type AuthFailure = { ok: false; status: 401 | 429; retryAfterMs: number };
+type AuthResult = { ok: true; device: Device } | AuthFailure;
+
+class AuthError extends Error {
+  constructor(public reason: "unauthorized" | "rate-limited") {
+    super(reason);
+  }
 }
 
 export function createApp(config: Config) {
   const store = new Store(config.dataDir);
   buildDerivedData(store);
+  const limiter = new AuthLimiter(config.authMaxFailures, config.authWindowMs, config.authLockoutMs);
+
+  function locked(address: string): AuthFailure | null {
+    const retryAfterMs = limiter.retryAfter(address);
+    return retryAfterMs > 0 ? { ok: false, status: 429, retryAfterMs } : null;
+  }
+
+  function failed(address: string): AuthFailure {
+    if (limiter.fail(address)) {
+      console.warn(`auth: too many failures from ${address}; locked out`);
+      return { ok: false, status: 429, retryAfterMs: limiter.retryAfter(address) };
+    }
+    console.warn(`auth: rejected credentials from ${address}`);
+    return { ok: false, status: 401, retryAfterMs: 0 };
+  }
+
+  // Note data is only reachable with a device token. AUTH_TOKEN registers devices.
+  function authenticateDevice(token: string | null, address: string): AuthResult {
+    const lockout = locked(address);
+    if (lockout) return lockout;
+    const device = token ? store.findDeviceByTokenHash(hashToken(token)) : null;
+    if (!device) return failed(address);
+    limiter.succeed(address);
+    const now = Date.now();
+    if (now - device.lastSeenAt > 60_000) store.touchDevice(device.id, now);
+    return { ok: true, device };
+  }
+
+  function authenticateRegistration(token: string | null, address: string): AuthFailure | null {
+    const lockout = locked(address);
+    if (lockout) return lockout;
+    if (!tokenMatches(config.authToken, token)) return failed(address);
+    limiter.succeed(address);
+    return null;
+  }
+
+  // Ends the sync connections a device has open, e.g. once it is revoked.
+  function disconnectDevice(deviceId: string): void {
+    for (const doc of server.hocuspocus.documents.values()) {
+      for (const connection of doc.getConnections()) {
+        if (connection.context?.deviceId === deviceId) connection.close({ code: 4401, reason: "unauthorized" });
+      }
+    }
+  }
 
   const server = new Server({
     port: config.port,
@@ -39,9 +90,20 @@ export function createApp(config: Config) {
     debounce: 1000,
     maxDebounce: 5000,
 
-    async onAuthenticate({ token, documentName }) {
-      if (!tokenMatches(config.authToken, token)) throw new Error("unauthorized");
+    async onUpgrade({ request }) {
+      request.headers[REMOTE_ADDR_HEADER] = request.socket.remoteAddress ?? "";
+    },
+
+    async onAuthenticate({ token, documentName, requestHeaders }) {
+      const address = clientAddress(
+        requestHeaders.get("x-forwarded-for"),
+        requestHeaders.get(REMOTE_ADDR_HEADER),
+        config.trustProxy,
+      );
+      const result = authenticateDevice(token, address);
+      if (!result.ok) throw new AuthError(result.status === 429 ? "rate-limited" : "unauthorized");
       if (documentName !== INDEX_DOC && !noteIdFromDocName(documentName)) throw new Error("bad document name");
+      return { deviceId: result.device.id };
     },
 
     async onLoadDocument({ document, documentName }) {
@@ -95,7 +157,49 @@ export function createApp(config: Config) {
     if (p.startsWith("/api/")) {
       const auth = req.headers.authorization;
       const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (!tokenMatches(config.authToken, token)) return send(res, 401, { error: "unauthorized" });
+      const address = clientAddress(
+        req.headers["x-forwarded-for"] as string | undefined,
+        req.socket.remoteAddress,
+        config.trustProxy,
+      );
+
+      if (p === "/api/devices" && req.method === "POST") {
+        const denied = authenticateRegistration(token, address);
+        if (denied) return refuse(res, denied);
+        const body = await readJson(req);
+        const name = deviceName(body?.name);
+        const deviceToken = newDeviceToken();
+        const device = store.createDevice(crypto.randomUUID(), name, hashToken(deviceToken), Date.now());
+        console.log(`auth: registered device "${name}" (${device.id}) from ${address}`);
+        return send(res, 201, { ...device, token: deviceToken });
+      }
+
+      const result = authenticateDevice(token, address);
+      if (!result.ok) return refuse(res, result);
+      const self = result.device;
+
+      if (p === "/api/devices" && req.method === "GET") {
+        return send(
+          res,
+          200,
+          store.listDevices().map((d) => ({ ...d, current: d.id === self.id })),
+        );
+      }
+
+      if (p === "/api/devices/current" && req.method === "PATCH") {
+        const body = await readJson(req);
+        store.renameDevice(self.id, deviceName(body?.name));
+        return send(res, 200, { ok: true });
+      }
+
+      const revoke = p.match(/^\/api\/devices\/([0-9a-f-]{36})$/);
+      if (revoke && req.method === "DELETE") {
+        if (!store.deleteDevice(revoke[1])) return send(res, 404, { error: "not found" });
+        disconnectDevice(revoke[1]);
+        console.log(`auth: device ${revoke[1]} revoked by ${self.id}`);
+        return send(res, 200, { ok: true });
+      }
+
       if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
 
       if (p === "/api/notes") return send(res, 200, store.listNotes());
@@ -151,7 +255,35 @@ export function createApp(config: Config) {
     return false;
   }
 
-  return { server, store };
+  return { server, store, limiter };
+}
+
+function deviceName(raw: unknown): string {
+  const name = typeof raw === "string" ? raw.trim().slice(0, 64) : "";
+  return name || "端末";
+}
+
+async function readJson(req: IncomingMessage): Promise<any> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 16 * 1024) return null;
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function refuse(res: ServerResponse, result: AuthFailure): true {
+  if (result.status === 429) {
+    res.setHeader("Retry-After", String(Math.ceil(result.retryAfterMs / 1000)));
+    return send(res, 429, { error: "rate-limited", retryAfter: Math.ceil(result.retryAfterMs / 1000) });
+  }
+  return send(res, 401, { error: "unauthorized" });
 }
 
 // Databases created before full-text search or history existed lack the

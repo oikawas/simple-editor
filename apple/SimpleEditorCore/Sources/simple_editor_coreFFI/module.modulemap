@@ -1,0 +1,6 @@
+// Used on Linux only; on Apple platforms the XCFramework carries its own.
+module simple_editor_coreFFI {
+    header "simple_editor_coreFFI.h"
+    link "simple_editor_core"
+    export *
+}

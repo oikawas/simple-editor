@@ -5,6 +5,7 @@ use crate::{history, settings_dialog};
 use adw::prelude::*;
 use gtk::{gio, glib};
 use simple_editor_core::client::{Client, ClientConfig, ClientListener, Note};
+use simple_editor_core::diff::remap_char_offsets;
 use simple_editor_core::error::CoreError;
 use simple_editor_core::note::NoteSummary;
 use simple_editor_core::sync::SyncStatus;
@@ -728,24 +729,21 @@ impl App {
     }
 
     /// Applies a change from another device, touching only the part that
-    /// differs. The cursor and selection keep their place in the text: a
-    /// remote insertion right at the cursor does not push it along.
+    /// differs. The cursor and selection keep their place in the surrounding
+    /// text, even when the change touches several places; a remote insertion
+    /// right at the cursor does not push it along.
     fn show_remote_body(self: &Rc<Self>, note: &Note) {
         let buffer = &self.ui.buffer;
         let old = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false).to_string();
-        let Some((start, removed, inserted)) = char_span(&old, &note.body()) else { return };
-        let inserted_len = inserted.chars().count() as i32;
-        let remap = |offset: i32| {
-            if offset <= start {
-                offset
-            } else if offset >= start + removed {
-                offset - removed + inserted_len
-            } else {
-                start
-            }
-        };
-        let cursor = remap(buffer.iter_at_mark(&buffer.get_insert()).offset());
-        let bound = remap(buffer.iter_at_mark(&buffer.selection_bound()).offset());
+        // Read the body once: another change may arrive at any moment.
+        let new = note.body();
+        let Some((start, removed, inserted)) = char_span(&old, &new) else { return };
+        let marks = [
+            buffer.iter_at_mark(&buffer.get_insert()).offset() as usize,
+            buffer.iter_at_mark(&buffer.selection_bound()).offset() as usize,
+        ];
+        let mapped = remap_char_offsets(&old, &new, &marks);
+        let (cursor, bound) = (mapped[0] as i32, mapped[1] as i32);
         let handler = self.ui.changed_handler.borrow();
         if let Some(h) = handler.as_ref() {
             buffer.block_signal(h);

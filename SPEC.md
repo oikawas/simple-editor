@@ -182,6 +182,16 @@ There are two kinds of client:
 - Each app stores the device token in the OS's secure storage (the Keychain and the like) and hands it to the core on startup
 - Tests run the real server and check sync between Rust clients, interoperation with a JavaScript client built on the web app's libraries, offline edits being sent later, and device revocation
 
+### 4.5 Linux client (GTK4)
+
+- Written in Rust and using the core directly (no UniFFI). The UI is GTK 4.14 and libadwaita 1.5
+- A split view (switching on narrow screens): search, tag filter, trash, and the list on the left; tags, creation and update times, and the text on the right. The header has history, export as text, and move to (or out of) the trash
+- The text is a GtkTextView. Each change passes the whole text to the core, which records only the part that changed. Changes from other devices are applied to the changed part only, and the cursor and selection stay in place (an insertion right at the cursor does not push it along)
+- The first line (the title) is shown larger
+- The settings register this device, rename it, list and revoke registered devices, and export everything. When this device is revoked, the stored token is deleted and registration is shown
+- The device token is stored with Secret Service (GNOME Keyring and the like); where that is unavailable, in a file in the config directory (mode 600)
+- Settings live in `~/.config/simple-editor/settings.json` and notes in `~/.local/share/simple-editor`
+
 ## 5. Data model
 
 ### 5.1 Notes (Yjs documents)
@@ -287,3 +297,4 @@ Everything except `/api/health` and device registration requires `Authorization:
 - The local CA's root certificate has to be installed on each device
 - Changing the server's IP address (or name) makes each device treat the app as a different one. Edits not yet sent at that point are lost
 - Body formatting (such as rendering Markdown) is not handled
+- The native apps do not show other devices' cursors (only the web app does)

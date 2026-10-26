@@ -23,6 +23,7 @@ Simplenote の代わりに使える、自宅サーバーで動かすプレーン
 server/   Node.js + Hocuspocus（Yjs の同期サーバー）+ SQLite。Web クライアントも配信する
 client/   Web クライアント（TypeScript + CodeMirror 6）。PWA としてインストールできる
 core/     ネイティブアプリ共通のコア（Rust）。同期・通信・端末内の保存。UniFFI で Swift・Kotlin から使う
+linux/    Linux 版（Rust + GTK4 / libadwaita）
 Caddyfile LAN 向けの HTTPS（ローカル CA）の設定。compose で Caddy が使う
 ```
 
@@ -85,6 +86,26 @@ openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint 
 - 設定画面（⚙︎）に登録済みの端末が並び、端末名の変更や、ほかの端末の登録解除ができます。端末をなくしたときは、別の端末からその端末の登録を解除してください
 - 端末トークンを導入する前から使っていた Web アプリは、次に開いたときに自動で登録し直します
 
+## Linux 版（GTK4）
+
+Web アプリのほかに、Linux 用のネイティブアプリがあります。GTK 4.14 以上と libadwaita 1.5 以上（Ubuntu 24.04 以降など）が必要です。
+
+```sh
+sudo apt install build-essential libgtk-4-dev libadwaita-1-dev   # Rust（rustup）も必要
+cargo build --release -p simple-editor-gtk
+install -Dm755 target/release/simple-editor-gtk ~/.local/bin/simple-editor-gtk
+install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/applications/io.github.oikawas.SimpleEditor.desktop
+```
+
+- サーバーのルート証明書は、OS の証明書ストアに入れます（Debian / Ubuntu の場合）
+  ```sh
+  sudo cp simple-editor-ca.crt /usr/local/share/ca-certificates/
+  sudo update-ca-certificates
+  ```
+- 初回起動時の設定画面で、サーバー URL（`https://<SERVER_IP>`）、端末名、登録用トークンを入力して登録します
+- 端末トークンはデスクトップの鍵束（GNOME Keyring など、Secret Service）に保存します。鍵束がない環境では `~/.config/simple-editor/device-token`（本人だけが読める権限）に保存します
+- ノートは `~/.local/share/simple-editor` にも保存され、オフラインでも読み書きできます
+
 ## 設定（`.env`）
 
 | 名前 | 既定値 | 説明 |
@@ -135,7 +156,7 @@ npm run build -w server && (cd core && cargo test)   # コアのテスト（実�
 
 ## 今後の候補
 
-- ネイティブアプリ（共通コアの上に、Linux は GTK4、macOS・iOS は SwiftUI、その後 Android の順で UI を作る）
+- ネイティブアプリ（macOS・iOS は SwiftUI、その後 Android）
 - オフライン時の全文検索（現状、オフライン中に本文まで検索できるのは開いているノートだけで、他はタイトル・冒頭・タグが対象）
 - ゴミ箱を空にする操作、履歴の保存期間の設定
 - Simplenote からのインポート

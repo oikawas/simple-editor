@@ -29,6 +29,7 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 server/   Node.js + Hocuspocus (Yjs sync server) + SQLite. Also serves the web client
 client/   Web client (TypeScript + CodeMirror 6), installable as a PWA
 core/     Shared core for the native apps (Rust): sync, networking, on-device storage; used from Swift and Kotlin through UniFFI
+linux/    The Linux app (Rust + GTK4 / libadwaita)
 Caddyfile HTTPS on the LAN (local CA), used by Caddy in compose
 ```
 
@@ -91,6 +92,26 @@ Open `https://<SERVER_IP>/`, enter a device name and the registration token (`AU
 - The settings (⚙︎) list the registered devices; you can rename this device and revoke others. If a device is lost, revoke it from another device
 - A web app set up before device tokens registers itself automatically the next time it opens
 
+## Linux app (GTK4)
+
+Besides the web app there is a native Linux app. It needs GTK 4.14 or later and libadwaita 1.5 or later (Ubuntu 24.04 or later, for example).
+
+```sh
+sudo apt install build-essential libgtk-4-dev libadwaita-1-dev   # plus Rust (rustup)
+cargo build --release -p simple-editor-gtk
+install -Dm755 target/release/simple-editor-gtk ~/.local/bin/simple-editor-gtk
+install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/applications/io.github.oikawas.SimpleEditor.desktop
+```
+
+- Install the server's root certificate into the OS certificate store (on Debian / Ubuntu):
+  ```sh
+  sudo cp simple-editor-ca.crt /usr/local/share/ca-certificates/
+  sudo update-ca-certificates
+  ```
+- On first launch, enter the server URL (`https://<SERVER_IP>`), a device name, and the registration token in the settings to register
+- The device token is kept in the desktop keyring (GNOME Keyring and the like, via Secret Service). Without one, it goes to `~/.config/simple-editor/device-token`, readable only by you
+- Notes are also kept in `~/.local/share/simple-editor`, so they can be read and edited offline
+
 ## Settings (`.env`)
 
 | Name | Default | Description |
@@ -141,7 +162,7 @@ See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
 ## Possible next steps
 
-- Native apps (UIs on the shared core: GTK4 for Linux, then SwiftUI for macOS and iOS, then Android)
+- Native apps (SwiftUI for macOS and iOS, then Android)
 - Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
 - Emptying the trash, a retention period for history
 - Importing from Simplenote

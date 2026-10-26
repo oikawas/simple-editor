@@ -5,4 +5,4 @@ data
 .env
 .git
 caddy
-core/target
+target

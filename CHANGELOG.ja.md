@@ -11,6 +11,7 @@
 - 端末ごとのトークン。`AUTH_TOKEN` は端末の登録用になり、登録した端末にはそれぞれ専用のトークンを発行する（サーバーはハッシュだけを保存）。設定画面で登録済みの端末の一覧、端末名の変更、登録解除ができる。解除した端末の接続はその場で切る
 - 認証の試行回数の制限。失敗が続いた接続元を一定時間締め出す（`AUTH_MAX_FAILURES`、`AUTH_WINDOW_MINUTES`、`AUTH_LOCKOUT_MINUTES`）
 - API: `POST /api/devices`、`GET /api/devices`、`PATCH /api/devices/current`、`DELETE /api/devices/<id>`
+- Linux 版のネイティブアプリ（GTK4 / libadwaita、`linux/`）。一覧・検索・タグ・ゴミ箱・編集・書き出し・編集履歴と復元、端末の登録と管理、オフライン編集に対応
 - ネイティブアプリ共通のコア（Rust、`core/`）。Yjs 互換の同期、端末内の保存、サーバーの API を、UniFFI で Swift・Kotlin から使えるようにする
 
 - LAN 内での HTTPS 接続。compose に Caddy を加え、独自の認証局（ローカル CA）で証明書を発行する。各端末は `http://<サーバー>/ca.crt` からルート証明書を入れて信頼させる。IP アドレスでの接続（SNI なし）にも対応

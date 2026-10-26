@@ -4,9 +4,16 @@ services:
     image: simple-editor:latest
     restart: unless-stopped
     environment:
+      # Registers devices; each device then gets its own token.
       # Generate with: openssl rand -hex 32
       AUTH_TOKEN: ${AUTH_TOKEN:?set AUTH_TOKEN in .env}
       HISTORY_INTERVAL_MINUTES: ${HISTORY_INTERVAL_MINUTES:-10}
+      AUTH_MAX_FAILURES: ${AUTH_MAX_FAILURES:-10}
+      AUTH_WINDOW_MINUTES: ${AUTH_WINDOW_MINUTES:-15}
+      AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
+      # Requests arrive through caddy, which reports the real client address
+      # in X-Forwarded-For. Only safe because this service publishes no port.
+      TRUST_PROXY: "1"
     volumes:
       - ./data:/data
     # Reached only through caddy; not published on the host.

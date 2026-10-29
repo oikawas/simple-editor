@@ -47,6 +47,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - In dark mode, the web app's editor caret and selection blended into the background
+- On wide screens the web app's text sat in a centered column with a large gap on the left; it now starts at the same edge as the tags and dates
 
 - Starting compose without an existing `./data` failed because Docker created the directory as root and the app could not write to it. The container now fixes the ownership on startup, then drops to a non-root user
 - Compose did not pass `HISTORY_INTERVAL_MINUTES` to the app

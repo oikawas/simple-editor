@@ -9,7 +9,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - Display settings: the web app sets the text's font size, and the Linux app its font (typeface, weight, and size), per device in the settings
-
 - Per-device tokens. `AUTH_TOKEN` now registers devices, and each registered device gets its own token (the server stores only a hash). The settings list registered devices and can rename this device or revoke any device; a revoked device is disconnected at once
 - Limiting authentication attempts: an address with repeated failures is locked out for a while (`AUTH_MAX_FAILURES`, `AUTH_WINDOW_MINUTES`, `AUTH_LOCKOUT_MINUTES`)
 - APIs: `POST /api/devices`, `GET /api/devices`, `PATCH /api/devices/current`, `DELETE /api/devices/<id>`

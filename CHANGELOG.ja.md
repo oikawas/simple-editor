@@ -9,7 +9,6 @@
 ### 追加
 
 - 表示の設定。Web アプリは本文の文字の大きさ、Linux 版は本文のフォント（書体・太さ・大きさ）を、設定画面で端末ごとに変えられる
-
 - 端末ごとのトークン。`AUTH_TOKEN` は端末の登録用になり、登録した端末にはそれぞれ専用のトークンを発行する（サーバーはハッシュだけを保存）。設定画面で登録済みの端末の一覧、端末名の変更、登録解除ができる。解除した端末の接続はその場で切る
 - 認証の試行回数の制限。失敗が続いた接続元を一定時間締め出す（`AUTH_MAX_FAILURES`、`AUTH_WINDOW_MINUTES`、`AUTH_LOCKOUT_MINUTES`）
 - API: `POST /api/devices`、`GET /api/devices`、`PATCH /api/devices/current`、`DELETE /api/devices/<id>`

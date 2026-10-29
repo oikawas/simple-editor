@@ -28,6 +28,22 @@ enum EditorFont {
         #endif
     }
 
+    /// The editor's font for the platform text view; an empty family means
+    /// the system font, and an unknown one falls back to it.
+    @MainActor static func platformFont(family: String, size: Double) -> PlatformFont {
+        #if os(macOS)
+        if !family.isEmpty, let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size) {
+            return font
+        }
+        return .systemFont(ofSize: size)
+        #else
+        if !family.isEmpty {
+            return UIFont(descriptor: UIFontDescriptor(fontAttributes: [.family: family]), size: size)
+        }
+        return .systemFont(ofSize: size)
+        #endif
+    }
+
     /// An empty family means the system font.
     static func font(family: String, size: Double) -> Font {
         family.isEmpty ? .system(size: size) : .custom(family, size: size)

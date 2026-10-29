@@ -36,6 +36,41 @@ public final class OpenNote: Identifiable {
         reloadMeta()
     }
 
+    /// The editor's text went from `base` (what it last showed) to `edited`.
+    /// Applies that change even if changes from other devices arrived
+    /// meanwhile (say, while an input method was composing): the edited span
+    /// is located in the current text by a diff, so neither change is lost.
+    /// Afterwards `text` is the merged result and the cursor follows the edit.
+    public func applyEdit(from base: String, to edited: String) {
+        guard let (start, removed, inserted) = Self.differingSpan(base, edited) else { return }
+        let current = note.body()
+        let mapped = remapOffsets(
+            old: base, new: current,
+            offsets: [UInt32(start), UInt32(start + removed)]
+        )
+        note.editBody(start: mapped[0], delete: mapped[1] - min(mapped[0], mapped[1]), insert: inserted)
+        let caret = Int(mapped[0]) + inserted.utf16.count
+        text = note.body()
+        selection = caret..<caret
+        reloadMeta()
+    }
+
+    /// The span where two texts differ, in UTF-16 units: start, removed
+    /// length, inserted text. It never splits a surrogate pair.
+    static func differingSpan(_ old: String, _ new: String) -> (Int, Int, String)? {
+        if old == new { return nil }
+        let a = Array(old.utf16)
+        let b = Array(new.utf16)
+        var start = 0
+        while start < a.count, start < b.count, a[start] == b[start] { start += 1 }
+        if start > 0, start < a.count, UTF16.isTrailSurrogate(a[start]) { start -= 1 }
+        var end = 0
+        while end < a.count - start, end < b.count - start, a[a.count - 1 - end] == b[b.count - 1 - end] { end += 1 }
+        if end > 0, end < a.count, UTF16.isTrailSurrogate(a[a.count - end]) { end -= 1 }
+        let inserted = String(decoding: b[start..<(b.count - end)], as: UTF16.self)
+        return (start, a.count - end - start, inserted)
+    }
+
     /// Another device changed the note: take its text, keeping the selection
     /// where it was relative to the surrounding text.
     func applyRemote() {

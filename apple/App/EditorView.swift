@@ -4,7 +4,6 @@ import SwiftUI
 struct EditorView: View {
     @Environment(AppModel.self) private var model
     let note: OpenNote
-    @State private var selection: TextSelection?
     @State private var newTag = ""
     @State private var showHistory = false
     @State private var exporting = false
@@ -18,10 +17,11 @@ struct EditorView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
-            TextEditor(text: text, selection: $selection)
-                .font(EditorFont.font(family: fontFamily, size: fontSize))
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 8)
+            NoteTextView(
+                note: note,
+                font: EditorFont.platformFont(family: fontFamily, size: fontSize),
+                onEdit: { model.currentNoteChanged() }
+            )
         }
         .navigationTitle(note.title.isEmpty ? "（無題）" : note.title)
         #if os(iOS)
@@ -38,13 +38,6 @@ struct EditorView: View {
                 }
             }
         }
-        .onChange(of: selection) { _, new in
-            if let range = utf16Range(new) { note.selection = range }
-        }
-        .onChange(of: note.externalRevision) {
-            // The text changed on another device; put the cursor back where it was.
-            selection = textSelection(note.selection)
-        }
         .sheet(isPresented: $showHistory) {
             HistoryView(note: note)
         }
@@ -52,13 +45,6 @@ struct EditorView: View {
                       defaultFilename: TextFile.filename(for: note.title)) { result in
             if case .failure(let error) = result { model.errorMessage = error.localizedDescription }
         }
-    }
-
-    private var text: Binding<String> {
-        Binding(get: { note.text }, set: { newValue in
-            note.edit(newValue)
-            model.currentNoteChanged()
-        })
     }
 
     private var tagBar: some View {
@@ -92,22 +78,6 @@ struct EditorView: View {
             .padding(.horizontal)
             .padding(.top, 8)
         }
-    }
-
-    /// The selection in UTF-16 offsets, as the model and core count.
-    private func utf16Range(_ selection: TextSelection?) -> Range<Int>? {
-        guard case .selection(let range) = selection?.indices else { return nil }
-        let text = note.text
-        guard range.lowerBound <= text.endIndex, range.upperBound <= text.endIndex else { return nil }
-        return range.lowerBound.utf16Offset(in: text)..<range.upperBound.utf16Offset(in: text)
-    }
-
-    private func textSelection(_ range: Range<Int>) -> TextSelection {
-        let text = note.text
-        let count = text.utf16.count
-        let lower = String.Index(utf16Offset: min(range.lowerBound, count), in: text)
-        let upper = String.Index(utf16Offset: min(range.upperBound, count), in: text)
-        return lower == upper ? TextSelection(insertionPoint: lower) : TextSelection(range: lower..<upper)
     }
 }
 

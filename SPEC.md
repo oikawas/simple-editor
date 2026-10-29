@@ -199,7 +199,9 @@ There are two kinds of client:
 - UI-independent state (registration, sync status, the list and search, the open note, devices, history, export) lives in the Swift package `SimpleEditorModel`. It also builds and tests on Linux, and its tests drive two devices against a real server
 - A split view (switching between list and editor on iPhone). Above the list are the tag filter and trash, below it the sync status. Above the editor are the tags and the creation and update times. The toolbar has history, export as text, and move to (or out of) the trash
 - Display in the settings sets the editor's typeface (any installed font, or the system font) and size, kept per device in UserDefaults and applied at once
-- The text is a `TextEditor` with selection. When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
+- The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
+  - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
+  - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL and device name in UserDefaults; notes in the app's data (Application Support)
 - Both apps ask for access to the local network (`NSLocalNetworkUsageDescription`). The macOS app is sandboxed and may only make network connections and write files the user chooses
 

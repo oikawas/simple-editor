@@ -1,0 +1,17 @@
+Target dependency graph (6 targets)
+Target 'AllExcludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'SimpleEditorCore-product' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorModel-product' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorCore' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorModel' in project 'SimpleEditorCore'
+Target 'SimpleEditorModel-product' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorModel' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorCore' in project 'SimpleEditorCore'
+Target 'SimpleEditorModel' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'simple_editor_coreFFI' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorCore' in project 'SimpleEditorCore'
+Target 'SimpleEditorCore-product' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'SimpleEditorCore' in project 'SimpleEditorCore'
+Target 'SimpleEditorCore' in project 'SimpleEditorCore'
+➜ Explicit dependency on target 'simple_editor_coreFFI' in project 'SimpleEditorCore'
+Target 'simple_editor_coreFFI' in project 'SimpleEditorCore' (no dependencies)

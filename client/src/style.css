@@ -150,3 +150,9 @@ dialog h3 { font-size: 14px; margin: 16px 0 6px; }
 #device-list .title { font-size: 14px; font-weight: 600; }
 #device-list .preview { font-size: 12px; color: var(--muted); }
 .status[data-state="rate-limited"] { color: var(--danger); }
+
+/* CodeMirror draws its own caret and selection and does not follow the
+   page's dark mode; use the app's colors so they show in both themes. */
+#editor .cm-cursor, #editor .cm-dropCursor { border-left: 2px solid var(--fg); }
+#editor .cm-selectionBackground { background: var(--accent-soft) !important; }
+#editor .cm-focused .cm-selectionBackground { background: var(--accent-soft) !important; }

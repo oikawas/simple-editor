@@ -1,0 +1,4 @@
+module SimpleEditorModel {
+header "SimpleEditorModel-Swift.h"
+export *
+}

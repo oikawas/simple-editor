@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/SimpleEditorModel-primary.dia",
+    "emit-module-dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/SimpleEditorModel-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/SimpleEditorModel-primary-emit-module.dia",
+    "pch" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/SimpleEditorModel-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/SimpleEditorModel-primary.swiftdeps"
+  },
+  "/home/user/simple-editor/apple/SimpleEditorCore/Sources/SimpleEditorModel/AppModel.swift" : {
+    "const-values" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.swiftconstvalues",
+    "dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.d",
+    "diagnostics" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.dia",
+    "index-unit-output-path" : "/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.o",
+    "llvm-bc" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.bc",
+    "object" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.o",
+    "swift-dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel.swiftdeps",
+    "swiftmodule" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/AppModel~partial.swiftmodule"
+  },
+  "/home/user/simple-editor/apple/SimpleEditorCore/Sources/SimpleEditorModel/OpenNote.swift" : {
+    "const-values" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.swiftconstvalues",
+    "dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.d",
+    "diagnostics" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.dia",
+    "index-unit-output-path" : "/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.o",
+    "llvm-bc" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.bc",
+    "object" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.o",
+    "swift-dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote.swiftdeps",
+    "swiftmodule" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/OpenNote~partial.swiftmodule"
+  },
+  "/home/user/simple-editor/apple/SimpleEditorCore/Sources/SimpleEditorModel/Storage.swift" : {
+    "const-values" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.swiftconstvalues",
+    "dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.d",
+    "diagnostics" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.dia",
+    "index-unit-output-path" : "/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.o",
+    "llvm-bc" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.bc",
+    "object" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.o",
+    "swift-dependencies" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage.swiftdeps",
+    "swiftmodule" : "/home/user/simple-editor/apple/SimpleEditorCore/.build/out/Intermediates.noindex/SimpleEditorCore.build/Debug-linux-x86_64/SimpleEditorModel-t.build/Objects-normal/x86_64/Storage~partial.swiftmodule"
+  }
+}

@@ -23,6 +23,7 @@ struct SettingsView: View {
                                       || deviceName == model.settings.deviceName)
                     }
                 }
+                DisplaySettingsSection()
                 Section("登録済みの端末") {
                     ForEach(devices, id: \.id) { device in
                         HStack {

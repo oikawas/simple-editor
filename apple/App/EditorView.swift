@@ -8,6 +8,8 @@ struct EditorView: View {
     @State private var newTag = ""
     @State private var showHistory = false
     @State private var exporting = false
+    @AppStorage(EditorFont.familyKey) private var fontFamily = ""
+    @AppStorage(EditorFont.sizeKey) private var fontSize = EditorFont.defaultSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -17,7 +19,7 @@ struct EditorView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
             TextEditor(text: text, selection: $selection)
-                .font(.body)
+                .font(EditorFont.font(family: fontFamily, size: fontSize))
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 8)
         }

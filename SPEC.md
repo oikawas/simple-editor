@@ -117,6 +117,12 @@ There are two kinds of client:
 - A successful authentication resets the address's failure count
 - Behind Caddy, the client address is the last value of the `X-Forwarded-For` header Caddy adds (`TRUST_PROXY=1`). Caddy replaces any value the client sent, so the limit cannot be dodged by forging it
 
+### 3.12 Display settings
+
+- Display in the settings changes how the text looks, per device. It is not stored on the server and does not affect other devices. Changes apply at once
+- Web app: the text's font size (12 to 28, 15 by default), kept in the browser's localStorage
+- Native apps: the text's typeface (any installed font) and size. "Reset" returns to the system default
+
 ## 4. Architecture
 
 ```
@@ -190,6 +196,7 @@ There are two kinds of client:
 - The first line (the title) is shown larger
 - The settings register this device, rename it, list and revoke registered devices, and export everything. When this device is revoked, the stored token is deleted and registration is shown
 - The device token is stored with Secret Service (GNOME Keyring and the like); where that is unavailable, in a file in the config directory (mode 600)
+- The editor font is chosen with GTK's font chooser in the settings (typeface, weight, and size) and applied to the text with CSS
 - Settings live in `~/.config/simple-editor/settings.json` and notes in `~/.local/share/simple-editor`
 
 ## 5. Data model

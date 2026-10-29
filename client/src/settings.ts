@@ -43,6 +43,32 @@ export function saveSettings(s: Settings): void {
   localStorage.setItem(KEY, JSON.stringify(stored));
 }
 
+// Per-device display preferences.
+export interface Display {
+  fontSize: number;
+}
+
+const DISPLAY_KEY = "simple-editor:display";
+export const DEFAULT_FONT_SIZE = 15;
+
+export function loadDisplay(): Display {
+  try {
+    const d = JSON.parse(localStorage.getItem(DISPLAY_KEY) ?? "{}");
+    const size = Number(d.fontSize);
+    return { fontSize: size >= 8 && size <= 48 ? size : DEFAULT_FONT_SIZE };
+  } catch {
+    return { fontSize: DEFAULT_FONT_SIZE };
+  }
+}
+
+export function saveDisplay(d: Display): void {
+  localStorage.setItem(DISPLAY_KEY, JSON.stringify(d));
+}
+
+export function applyDisplay(d: Display): void {
+  document.documentElement.style.setProperty("--editor-font-size", `${d.fontSize}px`);
+}
+
 export function syncUrl(s: Settings): string {
   return s.serverUrl.replace(/^http/, "ws").replace(/\/+$/, "") + "/sync";
 }

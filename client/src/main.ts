@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { lineDiff, restoreVersion, type Version, type VersionInfo } from "./history";
 import { newId, normalizeTag, summarize, type NoteSummary } from "./notes";
-import { loadSettings, saveSettings, type Settings } from "./settings";
+import { applyDisplay, loadDisplay, loadSettings, saveDisplay, saveSettings, type Settings } from "./settings";
 import { SyncClient, hasPending, type OpenNote, type Status } from "./sync";
 import "./style.css";
 
@@ -441,6 +441,7 @@ function openSettings(message = ""): void {
   field("serverUrl").value = settings.serverUrl;
   field("deviceName").value = settings.deviceName;
   field("registrationToken").value = "";
+  field("fontSize").value = String(loadDisplay().fontSize);
   showSettingsMessage(message);
   updateSettingsForm();
   if (!dialog.open) dialog.showModal();
@@ -513,6 +514,14 @@ async function revokeFromSettings(id: string, name: string, current: boolean): P
     void renderDevices();
   }
 }
+
+// Display changes apply at once and are kept even if the dialog is closed.
+settingsForm().addEventListener("change", (e) => {
+  if ((e.target as HTMLElement).getAttribute("name") !== "fontSize") return;
+  const display = { ...loadDisplay(), fontSize: Number(field("fontSize").value) };
+  saveDisplay(display);
+  applyDisplay(display);
+});
 
 settingsForm().addEventListener("input", (e) => {
   if ((e.target as HTMLElement).getAttribute("name") === "serverUrl") updateSettingsForm();
@@ -709,5 +718,6 @@ $("export-all").onclick = async () => {
   }
 };
 
+applyDisplay(loadDisplay());
 renderList();
 connect();

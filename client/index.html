@@ -47,6 +47,24 @@
           <label>登録用トークン<input name="registrationToken" type="password" autocomplete="off" /></label>
           <p class="hint">サーバーの AUTH_TOKEN の値です。この端末を登録するために一度だけ使い、端末には保存しません。</p>
         </div>
+        <section id="display-section">
+          <h3>表示</h3>
+          <label>本文の文字の大きさ
+            <select name="fontSize">
+              <option value="12">12</option>
+              <option value="13">13</option>
+              <option value="14">14</option>
+              <option value="15">15（標準）</option>
+              <option value="16">16</option>
+              <option value="18">18</option>
+              <option value="20">20</option>
+              <option value="22">22</option>
+              <option value="24">24</option>
+              <option value="28">28</option>
+            </select>
+          </label>
+          <p class="hint">この端末（ブラウザ）だけの設定で、すぐに反映されます。</p>
+        </section>
         <section id="devices-section" hidden>
           <h3>登録済みの端末</h3>
           <div id="device-list"></div>

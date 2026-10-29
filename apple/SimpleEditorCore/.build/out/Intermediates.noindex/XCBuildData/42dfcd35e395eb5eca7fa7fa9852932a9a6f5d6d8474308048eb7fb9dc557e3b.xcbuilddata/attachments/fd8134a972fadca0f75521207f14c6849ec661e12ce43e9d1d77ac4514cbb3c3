@@ -1,4 +1,0 @@
-module SimpleEditorCore {
-header "SimpleEditorCore-Swift.h"
-export *
-}

@@ -60,6 +60,8 @@ pub fn open(app: &Rc<App>, message: Option<&str>) {
     server.add(&register_row);
     page.add(&server);
 
+    page.add(&display_group(app));
+
     let devices = adw::PreferencesGroup::builder().title("登録済みの端末").build();
     page.add(&devices);
 
@@ -116,7 +118,12 @@ pub fn open(app: &Rc<App>, message: Option<&str>) {
             glib::spawn_future_local(async move {
                 match register_device(server_url.clone(), token, name.clone()).await {
                     Ok(creds) => {
-                        let settings = Settings { server_url: server_url.clone(), device_id: creds.id, device_name: name };
+                        let settings = Settings {
+                            server_url: server_url.clone(),
+                            device_id: creds.id,
+                            device_name: name,
+                            ..app.settings()
+                        };
                         settings.save();
                         config::save_token(&server_url, &creds.token).await;
                         app.set_settings(settings);
@@ -242,4 +249,61 @@ fn collect_rows(widget: &gtk::Widget, rows: &mut Vec<gtk::Widget>) {
         }
         child = c.next_sibling();
     }
+}
+
+/// The editor font: typeface and size, kept on this device.
+fn display_group(app: &Rc<App>) -> adw::PreferencesGroup {
+    let group = adw::PreferencesGroup::builder().title("表示").build();
+    let button = gtk::FontDialogButton::new(Some(gtk::FontDialog::builder().title("本文のフォント").build()));
+    button.set_valign(gtk::Align::Center);
+    button.set_font_desc(&current_font(&app.settings()));
+    let reset = gtk::Button::builder().label("標準に戻す").valign(gtk::Align::Center).build();
+    reset.add_css_class("flat");
+    let row = adw::ActionRow::builder()
+        .title("本文のフォント")
+        .subtitle("書体と大きさ。この端末だけの設定で、すぐに反映されます")
+        .build();
+    row.add_suffix(&reset);
+    row.add_suffix(&button);
+    group.add(&row);
+
+    // Set while the button is updated in code, so that is not saved as a choice.
+    let resetting = Rc::new(std::cell::Cell::new(false));
+    {
+        let (app, resetting) = (app.clone(), resetting.clone());
+        button.connect_font_desc_notify(move |button| {
+            if resetting.get() {
+                return;
+            }
+            if let Some(desc) = button.font_desc() {
+                save_font(&app, desc.to_string());
+            }
+        });
+    }
+    {
+        let (app, button) = (app.clone(), button.clone());
+        reset.connect_clicked(move |_| {
+            save_font(&app, String::new());
+            resetting.set(true);
+            button.set_font_desc(&current_font(&app.settings()));
+            resetting.set(false);
+        });
+    }
+    group
+}
+
+fn current_font(settings: &Settings) -> gtk::pango::FontDescription {
+    if !settings.font.is_empty() {
+        return gtk::pango::FontDescription::from_string(&settings.font);
+    }
+    let system = gtk::Settings::default().and_then(|s| s.gtk_font_name()).map(|n| n.to_string());
+    gtk::pango::FontDescription::from_string(system.as_deref().unwrap_or("Sans 11"))
+}
+
+fn save_font(app: &Rc<App>, font: String) {
+    let mut settings = app.settings();
+    settings.font = font;
+    settings.save();
+    app.set_settings(settings);
+    app.apply_font();
 }

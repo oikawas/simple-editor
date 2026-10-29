@@ -69,6 +69,7 @@ pub struct Ui {
     dates: gtk::Label,
     buffer: gtk::TextBuffer,
     view: gtk::TextView,
+    font_css: gtk::CssProvider,
     trash_button: gtk::Button,
     changed_handler: RefCell<Option<glib::SignalHandlerId>>,
 }
@@ -96,6 +97,7 @@ pub fn build(app: &adw::Application) -> Rc<App> {
         search_pending: Cell::new(None),
     });
     connect_signals(&app);
+    app.apply_font();
     app.render_list();
     app.show_note_ui(false);
     glib::spawn_future_local(clone_rc(&app, |app| async move { app.start().await }));
@@ -190,6 +192,13 @@ fn build_ui(app: &adw::Application) -> Ui {
         .bottom_margin(24)
         .pixels_below_lines(2)
         .build();
+    view.add_css_class("editor");
+    let font_css = gtk::CssProvider::new();
+    gtk::style_context_add_provider_for_display(
+        &gtk::prelude::WidgetExt::display(&view),
+        &font_css,
+        gtk::STYLE_PROVIDER_PRIORITY_USER,
+    );
     let text_scroll = gtk::ScrolledWindow::builder().child(&view).vexpand(true).build();
     let editor = gtk::Box::new(gtk::Orientation::Vertical, 0);
     editor.append(&tags_row);
@@ -244,6 +253,7 @@ fn build_ui(app: &adw::Application) -> Ui {
         dates,
         buffer,
         view,
+        font_css,
         trash_button,
         changed_handler: RefCell::new(None),
     }
@@ -368,6 +378,44 @@ impl App {
 
     pub fn settings(&self) -> Settings {
         self.state.borrow().settings.clone()
+    }
+
+    /// Applies the font chosen in the settings to the editor.
+    pub fn apply_font(&self) {
+        let font = self.settings().font;
+        let css = if font.is_empty() {
+            String::new()
+        } else {
+            let desc = gtk::pango::FontDescription::from_string(&font);
+            let mut rules = Vec::new();
+            if let Some(family) = desc.family() {
+                rules.push(format!("font-family: \"{}\";", family.replace(['"', '\\'], "")));
+            }
+            if desc.size() > 0 {
+                let size = desc.size() as f64 / gtk::pango::SCALE as f64;
+                let unit = if desc.is_size_absolute() { "px" } else { "pt" };
+                rules.push(format!("font-size: {size}{unit};"));
+            }
+            match desc.style() {
+                gtk::pango::Style::Italic => rules.push("font-style: italic;".into()),
+                gtk::pango::Style::Oblique => rules.push("font-style: oblique;".into()),
+                _ => {}
+            }
+            let weight = match desc.weight() {
+                gtk::pango::Weight::Thin => 100,
+                gtk::pango::Weight::Ultralight => 200,
+                gtk::pango::Weight::Light | gtk::pango::Weight::Semilight | gtk::pango::Weight::Book => 300,
+                gtk::pango::Weight::Medium => 500,
+                gtk::pango::Weight::Semibold => 600,
+                gtk::pango::Weight::Bold => 700,
+                gtk::pango::Weight::Ultrabold => 800,
+                gtk::pango::Weight::Heavy | gtk::pango::Weight::Ultraheavy => 900,
+                _ => 400,
+            };
+            rules.push(format!("font-weight: {weight};"));
+            format!("textview.editor {{ {} }}", rules.join(" "))
+        };
+        self.ui.font_css.load_from_string(&css);
     }
 
     pub fn set_settings(&self, settings: Settings) {

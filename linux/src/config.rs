@@ -10,6 +10,10 @@ pub struct Settings {
     pub server_url: String,
     pub device_id: String,
     pub device_name: String,
+    /// The editor's font as a Pango description ("Noto Sans CJK JP 13");
+    /// empty for the system default.
+    #[serde(default)]
+    pub font: String,
 }
 
 fn config_dir() -> PathBuf {

@@ -9,6 +9,10 @@ import UIKit
 enum EditorFont {
     static let familyKey = "editorFontFamily"
     static let sizeKey = "editorFontSize"
+    static let lineHeightKey = "editorLineHeight"
+
+    /// Line height as a multiple of the font size; about the font's own.
+    static let defaultLineHeight = 1.2
 
     /// The platform's usual body size.
     static var defaultSize: Double {
@@ -54,6 +58,7 @@ enum EditorFont {
 struct DisplaySettingsSection: View {
     @AppStorage(EditorFont.familyKey) private var family = ""
     @AppStorage(EditorFont.sizeKey) private var size = EditorFont.defaultSize
+    @AppStorage(EditorFont.lineHeightKey) private var lineHeight = EditorFont.defaultLineHeight
 
     var body: some View {
         Section {
@@ -69,18 +74,22 @@ struct DisplaySettingsSection: View {
             Stepper(value: $size, in: 9...40, step: 1) {
                 LabeledContent("大きさ", value: "\(Int(size))")
             }
+            Stepper(value: $lineHeight, in: 1.0...3.0, step: 0.1) {
+                LabeledContent("行間", value: lineHeight.formatted(.number.precision(.fractionLength(1))))
+            }
             Text("あいうえお 漢字 ABC abc 123")
                 .font(EditorFont.font(family: family, size: size))
                 .lineLimit(1)
             Button("標準に戻す") {
                 family = ""
                 size = EditorFont.defaultSize
+                lineHeight = EditorFont.defaultLineHeight
             }
-            .disabled(family.isEmpty && size == EditorFont.defaultSize)
+            .disabled(family.isEmpty && size == EditorFont.defaultSize && lineHeight == EditorFont.defaultLineHeight)
         } header: {
             Text("表示")
         } footer: {
-            Text("本文の書体と大きさです。この端末だけの設定で、すぐに反映されます。")
+            Text("本文の書体と大きさ、行間（文字の大きさに対する行の高さ）です。この端末だけの設定で、すぐに反映されます。")
         }
     }
 }

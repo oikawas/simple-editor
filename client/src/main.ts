@@ -441,7 +441,9 @@ function openSettings(message = ""): void {
   field("serverUrl").value = settings.serverUrl;
   field("deviceName").value = settings.deviceName;
   field("registrationToken").value = "";
-  field("fontSize").value = String(loadDisplay().fontSize);
+  const display = loadDisplay();
+  field("fontSize").value = String(display.fontSize);
+  field("lineHeight").value = display.lineHeight.toFixed(1);
   showSettingsMessage(message);
   updateSettingsForm();
   if (!dialog.open) dialog.showModal();
@@ -517,8 +519,9 @@ async function revokeFromSettings(id: string, name: string, current: boolean): P
 
 // Display changes apply at once and are kept even if the dialog is closed.
 settingsForm().addEventListener("change", (e) => {
-  if ((e.target as HTMLElement).getAttribute("name") !== "fontSize") return;
-  const display = { ...loadDisplay(), fontSize: Number(field("fontSize").value) };
+  const name = (e.target as HTMLElement).getAttribute("name");
+  if (name !== "fontSize" && name !== "lineHeight") return;
+  const display = { fontSize: Number(field("fontSize").value), lineHeight: Number(field("lineHeight").value) };
   saveDisplay(display);
   applyDisplay(display);
 });

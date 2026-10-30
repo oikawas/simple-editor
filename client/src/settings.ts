@@ -46,18 +46,25 @@ export function saveSettings(s: Settings): void {
 // Per-device display preferences.
 export interface Display {
   fontSize: number;
+  // Line height as a multiple of the font size.
+  lineHeight: number;
 }
 
 const DISPLAY_KEY = "simple-editor:display";
 export const DEFAULT_FONT_SIZE = 15;
+export const DEFAULT_LINE_HEIGHT = 1.6;
 
 export function loadDisplay(): Display {
   try {
     const d = JSON.parse(localStorage.getItem(DISPLAY_KEY) ?? "{}");
     const size = Number(d.fontSize);
-    return { fontSize: size >= 8 && size <= 48 ? size : DEFAULT_FONT_SIZE };
+    const height = Number(d.lineHeight);
+    return {
+      fontSize: size >= 8 && size <= 48 ? size : DEFAULT_FONT_SIZE,
+      lineHeight: height >= 1 && height <= 3 ? height : DEFAULT_LINE_HEIGHT,
+    };
   } catch {
-    return { fontSize: DEFAULT_FONT_SIZE };
+    return { fontSize: DEFAULT_FONT_SIZE, lineHeight: DEFAULT_LINE_HEIGHT };
   }
 }
 
@@ -67,6 +74,7 @@ export function saveDisplay(d: Display): void {
 
 export function applyDisplay(d: Display): void {
   document.documentElement.style.setProperty("--editor-font-size", `${d.fontSize}px`);
+  document.documentElement.style.setProperty("--editor-line-height", String(d.lineHeight));
 }
 
 export function syncUrl(s: Settings): string {

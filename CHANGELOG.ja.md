@@ -8,11 +8,11 @@
 
 ### 追加
 
-- 表示の設定。Web アプリは本文の文字の大きさ、Linux 版は本文のフォント（書体・太さ・大きさ）を、設定画面で端末ごとに変えられる
+- 表示の設定。Web アプリは本文の文字の大きさと行間、Linux 版は本文のフォント（書体・太さ・大きさ）と行間を、設定画面で端末ごとに変えられる
 - 端末ごとのトークン。`AUTH_TOKEN` は端末の登録用になり、登録した端末にはそれぞれ専用のトークンを発行する（サーバーはハッシュだけを保存）。設定画面で登録済みの端末の一覧、端末名の変更、登録解除ができる。解除した端末の接続はその場で切る
 - 認証の試行回数の制限。失敗が続いた接続元を一定時間締め出す（`AUTH_MAX_FAILURES`、`AUTH_WINDOW_MINUTES`、`AUTH_LOCKOUT_MINUTES`）
 - API: `POST /api/devices`、`GET /api/devices`、`PATCH /api/devices/current`、`DELETE /api/devices/<id>`
-- macOS・iOS 版のネイティブアプリ（SwiftUI、`apple/`）。Linux 版と同じ機能を持ち、端末トークンはキーチェーンに保存する。設定画面で本文の書体と大きさを選べる。画面に依存しない部分は Swift パッケージ `SimpleEditorModel` に分け、Linux でもテストできる
+- macOS・iOS 版のネイティブアプリ（SwiftUI、`apple/`）。Linux 版と同じ機能を持ち、端末トークンはキーチェーンに保存する。設定画面で本文の書体と大きさ、行間を選べる。画面に依存しない部分は Swift パッケージ `SimpleEditorModel` に分け、Linux でもテストできる
 - Linux 版のネイティブアプリ（GTK4 / libadwaita、`linux/`）。一覧・検索・タグ・ゴミ箱・編集・書き出し・編集履歴と復元、端末の登録と管理、オフライン編集に対応
 - ネイティブアプリ共通のコア（Rust、`core/`）。Yjs 互換の同期、端末内の保存、サーバーの API を、UniFFI で Swift・Kotlin から使えるようにする
 

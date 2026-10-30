@@ -9,6 +9,7 @@ struct EditorView: View {
     @State private var exporting = false
     @AppStorage(EditorFont.familyKey) private var fontFamily = ""
     @AppStorage(EditorFont.sizeKey) private var fontSize = EditorFont.defaultSize
+    @AppStorage(EditorFont.lineHeightKey) private var lineHeight = EditorFont.defaultLineHeight
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -20,6 +21,7 @@ struct EditorView: View {
             NoteTextView(
                 note: note,
                 font: EditorFont.platformFont(family: fontFamily, size: fontSize),
+                lineHeight: lineHeight,
                 onEdit: { model.currentNoteChanged() }
             )
         }

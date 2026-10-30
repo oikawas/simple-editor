@@ -251,7 +251,7 @@ fn collect_rows(widget: &gtk::Widget, rows: &mut Vec<gtk::Widget>) {
     }
 }
 
-/// The editor font: typeface and size, kept on this device.
+/// The editor font (typeface and size) and line height, kept on this device.
 fn display_group(app: &Rc<App>) -> adw::PreferencesGroup {
     let group = adw::PreferencesGroup::builder().title("表示").build();
     let button = gtk::FontDialogButton::new(Some(gtk::FontDialog::builder().title("本文のフォント").build()));
@@ -266,6 +266,24 @@ fn display_group(app: &Rc<App>) -> adw::PreferencesGroup {
     row.add_suffix(&reset);
     row.add_suffix(&button);
     group.add(&row);
+
+    let line_height = adw::SpinRow::builder()
+        .title("行間")
+        .subtitle("文字の大きさに対する行の高さ（標準は 1.2）")
+        .adjustment(&gtk::Adjustment::new(app.settings().line_height(), 1.0, 3.0, 0.1, 0.5, 0.0))
+        .digits(1)
+        .build();
+    {
+        let app = app.clone();
+        line_height.connect_value_notify(move |row| {
+            let mut settings = app.settings();
+            settings.line_height = (row.value() * 10.0).round() / 10.0;
+            settings.save();
+            app.set_settings(settings);
+            app.apply_font();
+        });
+    }
+    group.add(&line_height);
 
     // Set while the button is updated in code, so that is not saved as a choice.
     let resetting = Rc::new(std::cell::Cell::new(false));

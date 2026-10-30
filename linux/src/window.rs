@@ -381,14 +381,13 @@ impl App {
         self.state.borrow().settings.clone()
     }
 
-    /// Applies the font chosen in the settings to the editor.
+    /// Applies the font and line height chosen in the settings to the editor.
     pub fn apply_font(&self) {
-        let font = self.settings().font;
-        let css = if font.is_empty() {
-            String::new()
-        } else {
+        let settings = self.settings();
+        let font = &settings.font;
+        let mut rules = vec![format!("line-height: {:.1};", settings.line_height())];
+        if !font.is_empty() {
             let desc = gtk::pango::FontDescription::from_string(&font);
-            let mut rules = Vec::new();
             if let Some(family) = desc.family() {
                 rules.push(format!("font-family: \"{}\";", family.replace(['"', '\\'], "")));
             }
@@ -414,8 +413,8 @@ impl App {
                 _ => 400,
             };
             rules.push(format!("font-weight: {weight};"));
-            format!("textview.editor {{ {} }}", rules.join(" "))
-        };
+        }
+        let css = format!("textview.editor {{ {} }}", rules.join(" "));
         self.ui.font_css.load_from_string(&css);
     }
 

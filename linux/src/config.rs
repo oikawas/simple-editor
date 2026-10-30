@@ -14,7 +14,12 @@ pub struct Settings {
     /// empty for the system default.
     #[serde(default)]
     pub font: String,
+    /// Line height as a multiple of the font size; 0 for the default.
+    #[serde(default)]
+    pub line_height: f64,
 }
+
+pub const DEFAULT_LINE_HEIGHT: f64 = 1.2;
 
 fn config_dir() -> PathBuf {
     gtk::glib::user_config_dir().join("simple-editor")
@@ -39,6 +44,15 @@ impl Settings {
             s.device_name = default_device_name();
         }
         s
+    }
+
+    /// The line height to use, within 1.0 to 3.0.
+    pub fn line_height(&self) -> f64 {
+        if (1.0..=3.0).contains(&self.line_height) {
+            self.line_height
+        } else {
+            DEFAULT_LINE_HEIGHT
+        }
     }
 
     pub fn save(&self) {

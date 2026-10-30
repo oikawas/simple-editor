@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Per-device tokens. `AUTH_TOKEN` now registers devices, and each registered device gets its own token (the server stores only a hash). The settings list registered devices and can rename this device or revoke any device; a revoked device is disconnected at once
 - Limiting authentication attempts: an address with repeated failures is locked out for a while (`AUTH_MAX_FAILURES`, `AUTH_WINDOW_MINUTES`, `AUTH_LOCKOUT_MINUTES`)
 - APIs: `POST /api/devices`, `GET /api/devices`, `PATCH /api/devices/current`, `DELETE /api/devices/<id>`
+- A native macOS and iOS app (SwiftUI, `apple/`) with the same features as the Linux app; the device token is kept in the Keychain, and the settings choose the editor's typeface and size. The UI-independent part is the Swift package `SimpleEditorModel`, which can be tested on Linux too
 - A native Linux app (GTK4 / libadwaita, `linux/`): list, search, tags, trash, editing, export, history and restore, device registration and management, and offline editing
 - A shared core for the native apps (Rust, `core/`): Yjs-compatible sync, on-device storage, and the server API, usable from Swift and Kotlin through UniFFI
 

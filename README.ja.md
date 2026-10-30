@@ -24,6 +24,7 @@ server/   Node.js + Hocuspocus（Yjs の同期サーバー）+ SQLite。Web ク�
 client/   Web クライアント（TypeScript + CodeMirror 6）。PWA としてインストールできる
 core/     ネイティブアプリ共通のコア（Rust）。同期・通信・端末内の保存。UniFFI で Swift・Kotlin から使う
 linux/    Linux 版（Rust + GTK4 / libadwaita）
+apple/    macOS・iOS 版（SwiftUI）と、コアの Swift パッケージ
 Caddyfile LAN 向けの HTTPS（ローカル CA）の設定。compose で Caddy が使う
 ```
 
@@ -106,6 +107,25 @@ install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/
 - 端末トークンはデスクトップの鍵束（GNOME Keyring など、Secret Service）に保存します。鍵束がない環境では `~/.config/simple-editor/device-token`（本人だけが読める権限）に保存します
 - ノートは `~/.local/share/simple-editor` にも保存され、オフラインでも読み書きできます
 
+## macOS・iOS 版（SwiftUI）
+
+Mac で Xcode を使ってビルドします。macOS 15 以上、iOS 18 以上で動きます。
+
+必要なもの: Xcode 16 以上、Rust（rustup）、[XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）
+
+```sh
+./apple/build-xcframework.sh          # Rust のコアを macOS・iOS 向けにビルドする（初回は数分かかる）
+cd apple
+DEVELOPMENT_TEAM=<チーム ID> xcodegen generate
+open SimpleEditor.xcodeproj           # SimpleEditor-macOS か SimpleEditor-iOS を選んで実行
+```
+
+- チーム ID は Apple Developer のアカウントページ（Membership）で確認できます。指定しなかった場合は、Xcode の Signing & Capabilities で選んでください
+- コアを変更したら `build-xcframework.sh` を実行し直します
+- iPhone では、事前にサーバーのルート証明書をインストールしておきます（上の「各端末の準備」）。初回起動時に、ローカルネットワークへの接続の許可を求められるので許可してください
+- 端末トークンはキーチェーンに保存します。ノートはアプリのデータ領域にも保存され、オフラインでも読み書きできます
+- 画面に依存しない部分（`apple/SimpleEditorCore` の `SimpleEditorModel`）は、Mac でも Linux でも `swift test` でテストできます。`SIMPLE_EDITOR_TEST_SERVER`（サーバー URL）と `SIMPLE_EDITOR_TEST_TOKEN`（登録用トークン）を設定すると、実際のサーバーを相手に 2 台分の操作を確認します。Linux では先に `./apple/generate-bindings.sh` を実行します
+
 ## 設定（`.env`）
 
 | 名前 | 既定値 | 説明 |
@@ -156,7 +176,7 @@ npm run build -w server && (cd core && cargo test)   # コアのテスト（実�
 
 ## 今後の候補
 
-- ネイティブアプリ（macOS・iOS は SwiftUI、その後 Android）
+- Android 版
 - オフライン時の全文検索（現状、オフライン中に本文まで検索できるのは開いているノートだけで、他はタイトル・冒頭・タグが対象）
 - ゴミ箱を空にする操作、履歴の保存期間の設定
 - Simplenote からのインポート

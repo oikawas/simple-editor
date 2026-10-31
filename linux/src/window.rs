@@ -1,4 +1,5 @@
-//! The main window: note list on the left, editor on the right.
+//! The main window: note list (or the diary's calendar) on the left, editor
+//! on the right.
 
 use crate::config::{self, Settings};
 use crate::{history, settings_dialog};
@@ -7,7 +8,7 @@ use gtk::{gio, glib};
 use simple_editor_core::client::{Client, ClientConfig, ClientListener, Note};
 use simple_editor_core::diff::remap_char_offsets;
 use simple_editor_core::error::CoreError;
-use simple_editor_core::note::NoteSummary;
+use simple_editor_core::note::{diary_date, diary_note_id, NoteSummary};
 use simple_editor_core::sync::SyncStatus;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -37,6 +38,12 @@ impl ClientListener for Listener {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Notes,
+    Diary,
+}
+
 #[derive(Clone, PartialEq)]
 enum Filter {
     All,
@@ -50,6 +57,7 @@ struct State {
     notes: Vec<NoteSummary>,
     current: Option<Arc<Note>>,
     filter: Filter,
+    mode: Mode,
     /// Full-text hits from the server for a query: note id -> excerpt.
     search: Option<(String, HashMap<String, String>)>,
 }
@@ -61,8 +69,17 @@ pub struct Ui {
     status_title: adw::WindowTitle,
     banner: adw::Banner,
     search: gtk::SearchEntry,
+    notes_tab: gtk::ToggleButton,
+    diary_tab: gtk::ToggleButton,
+    new_button: gtk::Button,
+    tag_scroll: gtk::ScrolledWindow,
     tag_bar: gtk::Box,
+    calendar: gtk::Calendar,
+    /// The (year, month) the list and marks were made for. A day selection
+    /// that comes with moving to another month is not taken as picking a day.
+    shown_month: Rc<Cell<(i32, i32)>>,
     list: gtk::ListBox,
+    empty: adw::StatusPage,
     content_page: adw::NavigationPage,
     stack: gtk::Stack,
     tags_flow: gtk::FlowBox,
@@ -82,16 +99,42 @@ pub struct App {
     search_pending: Cell<Option<glib::SourceId>>,
 }
 
+const WEEKDAYS: [&str; 7] = ["日", "月", "火", "水", "木", "金", "土"];
+
+/// "2024年1月2日（火）" for "2024-01-02".
+fn format_diary_date(date: &str) -> String {
+    match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+        Ok(d) => {
+            use chrono::Datelike;
+            let weekday = WEEKDAYS[d.weekday().num_days_from_sunday() as usize];
+            format!("{}年{}月{}日（{weekday}）", d.year(), d.month(), d.day())
+        }
+        Err(_) => date.to_owned(),
+    }
+}
+
+fn today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// A diary day counts as written once it has some text.
+fn is_written(n: &NoteSummary) -> bool {
+    !n.title.is_empty()
+}
+
 pub fn build(app: &adw::Application) -> Rc<App> {
     let ui = build_ui(app);
+    let settings = Settings::load();
+    let mode = if settings.diary_mode { Mode::Diary } else { Mode::Notes };
     let app = Rc::new(App {
         ui,
         state: RefCell::new(State {
-            settings: Settings::load(),
+            settings,
             client: None,
             notes: Vec::new(),
             current: None,
             filter: Filter::All,
+            mode,
             search: None,
         }),
         refresh_pending: Cell::new(None),
@@ -128,7 +171,21 @@ fn build_ui(app: &adw::Application) -> Ui {
     side_header.pack_end(&menu_button);
 
     let banner = adw::Banner::new("");
-    let search = gtk::SearchEntry::builder().placeholder_text("検索").margin_start(8).margin_end(8).margin_top(6).build();
+    let notes_tab = gtk::ToggleButton::builder().label("メモ").hexpand(true).build();
+    let diary_tab = gtk::ToggleButton::builder().label("日記").hexpand(true).group(&notes_tab).build();
+    let tabs = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    tabs.add_css_class("linked");
+    tabs.set_margin_start(8);
+    tabs.set_margin_end(8);
+    tabs.set_margin_top(6);
+    tabs.append(&notes_tab);
+    tabs.append(&diary_tab);
+    let search = gtk::SearchEntry::builder()
+        .placeholder_text("検索（メモと日記）")
+        .margin_start(8)
+        .margin_end(8)
+        .margin_top(6)
+        .build();
     let tag_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     tag_bar.set_margin_start(8);
     tag_bar.set_margin_end(8);
@@ -138,13 +195,16 @@ fn build_ui(app: &adw::Application) -> Ui {
         .margin_top(6)
         .margin_bottom(6)
         .build();
+    let calendar = gtk::Calendar::builder().margin_start(8).margin_end(8).margin_top(6).margin_bottom(6).build();
     let list = gtk::ListBox::new();
     list.add_css_class("navigation-sidebar");
     let list_scroll = gtk::ScrolledWindow::builder().child(&list).vexpand(true).build();
     let side_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     side_box.append(&banner);
+    side_box.append(&tabs);
     side_box.append(&search);
     side_box.append(&tag_scroll);
+    side_box.append(&calendar);
     side_box.append(&list_scroll);
     let side_toolbar = adw::ToolbarView::new();
     side_toolbar.add_top_bar(&side_header);
@@ -238,6 +298,7 @@ fn build_ui(app: &adw::Application) -> Ui {
     narrow.add_setter(&split, "collapsed", Some(&true.to_value()));
     window.add_breakpoint(narrow);
 
+    let shown_month = (calendar.year(), calendar.month());
     Ui {
         window,
         toasts,
@@ -245,8 +306,15 @@ fn build_ui(app: &adw::Application) -> Ui {
         status_title,
         banner,
         search,
+        notes_tab,
+        diary_tab,
+        new_button,
+        tag_scroll,
         tag_bar,
+        calendar,
+        shown_month: Rc::new(Cell::new(shown_month)),
         list,
+        empty,
         content_page,
         stack,
         tags_flow,
@@ -294,7 +362,43 @@ fn connect_signals(app: &Rc<App>) {
     let weak = Rc::downgrade(app);
     app.ui.list.connect_row_activated(move |_, row| {
         if let Some(app) = weak.upgrade() {
-            app.select_note(&row.widget_name());
+            let id = row.widget_name().to_string();
+            match diary_date(id.clone()) {
+                Some(date) => app.open_diary(&date),
+                None => app.select_note(&id),
+            }
+        }
+    });
+
+    let weak = Rc::downgrade(app);
+    app.ui.notes_tab.connect_toggled(move |tab| {
+        if let Some(app) = weak.upgrade() {
+            app.set_mode(if tab.is_active() { Mode::Notes } else { Mode::Diary });
+        }
+    });
+
+    // Moving to another month shows its entries; picking a day in the shown
+    // month opens that day's entry. Moving can also select a day, so a
+    // selection is a pick only when the month stayed the same.
+    let weak = Rc::downgrade(app);
+    let moved = move |_: &gtk::Calendar| {
+        if let Some(app) = weak.upgrade() {
+            app.calendar_month_changed();
+        }
+    };
+    let calendar = &app.ui.calendar;
+    calendar.connect_next_month(moved.clone());
+    calendar.connect_prev_month(moved.clone());
+    calendar.connect_next_year(moved.clone());
+    calendar.connect_prev_year(moved);
+    let weak = Rc::downgrade(app);
+    app.ui.calendar.connect_day_selected(move |calendar| {
+        let Some(app) = weak.upgrade() else { return };
+        if app.calendar_month_changed() {
+            return;
+        }
+        if let Ok(text) = calendar.date().format("%Y-%m-%d") {
+            app.open_diary(&text);
         }
     });
 
@@ -602,10 +706,28 @@ impl App {
         let terms: Vec<&str> = query.split_whitespace().collect();
         let hits = st.search.as_ref().filter(|(q, _)| q.to_lowercase() == query).map(|(_, h)| h);
         let current_body = st.current.as_ref().map(|n| (n.id(), n.body().to_lowercase()));
+        // Without a search: the notes (or the trash, or a tag), or the shown
+        // month's diary entries. A search covers notes and diary entries alike.
+        if terms.is_empty() && st.mode == Mode::Diary {
+            let month = format!("{:04}-{:02}-", self.ui.calendar.year(), self.ui.calendar.month() + 1);
+            let mut entries: Vec<(NoteSummary, Option<String>)> = st
+                .notes
+                .iter()
+                .filter(|n| is_written(n) && diary_date(n.id.clone()).is_some_and(|d| d.starts_with(&month)))
+                .map(|n| (n.clone(), None))
+                .collect();
+            entries.sort_by(|a, b| b.0.id.cmp(&a.0.id));
+            return entries;
+        }
+        let filter = if st.mode == Mode::Notes { st.filter.clone() } else { Filter::All };
         st.notes
             .iter()
-            .filter(|n| if st.filter == Filter::Trash { n.deleted } else { !n.deleted })
-            .filter(|n| match &st.filter {
+            .filter(|n| match diary_date(n.id.clone()) {
+                Some(_) => !terms.is_empty() && filter != Filter::Trash && is_written(n),
+                None if filter == Filter::Trash => n.deleted,
+                None => !n.deleted,
+            })
+            .filter(|n| match &filter {
                 Filter::Tag(t) => n.tags.contains(t),
                 _ => true,
             })
@@ -632,22 +754,48 @@ impl App {
             self.ui.list.remove(&child);
         }
         let current_id = self.state.borrow().current.as_ref().map(|n| n.id());
-        for (note, snippet) in self.visible_notes() {
+        let searching = !self.ui.search.text().trim().is_empty();
+        let visible = self.visible_notes();
+        if visible.is_empty() && !searching && self.state.borrow().mode == Mode::Diary {
+            let label = gtk::Label::builder()
+                .label("この月の日記はまだありません。カレンダーの日付を選ぶと書けます")
+                .wrap(true)
+                .margin_top(12)
+                .margin_start(12)
+                .margin_end(12)
+                .build();
+            label.add_css_class("dim-label");
+            let row = gtk::ListBoxRow::builder().child(&label).activatable(false).selectable(false).build();
+            self.ui.list.append(&row);
+        }
+        for (note, snippet) in visible {
+            let date = diary_date(note.id.clone());
+            let (title_text, preview_text, kind) = match &date {
+                Some(date) => {
+                    let body = [note.title.as_str(), note.preview.as_str()].join(" ");
+                    (format_diary_date(date), snippet.unwrap_or(body), if searching { "日記".to_owned() } else { String::new() })
+                }
+                None => (
+                    if note.title.is_empty() { "（無題）".to_owned() } else { note.title.clone() },
+                    snippet.unwrap_or_else(|| note.preview.clone()),
+                    format_date(note.updated_at),
+                ),
+            };
             let title = gtk::Label::builder()
-                .label(if note.title.is_empty() { "（無題）" } else { &note.title })
+                .label(&title_text)
                 .xalign(0.0)
                 .ellipsize(gtk::pango::EllipsizeMode::End)
                 .build();
             title.add_css_class("heading");
             let preview = gtk::Label::builder()
-                .label(snippet.as_deref().unwrap_or(&note.preview))
+                .label(&preview_text)
                 .xalign(0.0)
                 .ellipsize(gtk::pango::EllipsizeMode::End)
                 .build();
             preview.add_css_class("dim-label");
             let tags: Vec<String> = note.tags.iter().map(|t| format!("#{t}")).collect();
             let meta = gtk::Label::builder()
-                .label(format!("{}  {}", format_date(note.updated_at), tags.join(" ")))
+                .label(format!("{kind}  {}", tags.join(" ")).trim())
                 .xalign(0.0)
                 .ellipsize(gtk::pango::EllipsizeMode::End)
                 .build();
@@ -666,6 +814,86 @@ impl App {
             }
         }
         self.render_tag_bar();
+        self.render_mode();
+    }
+
+    fn set_mode(self: &Rc<Self>, mode: Mode) {
+        let settings = {
+            let mut st = self.state.borrow_mut();
+            if st.mode == mode {
+                return;
+            }
+            st.mode = mode;
+            st.settings.diary_mode = mode == Mode::Diary;
+            st.settings.clone()
+        };
+        settings.save();
+        self.render_list();
+    }
+
+    /// Shows the controls of the current tab, and marks the written days of
+    /// the calendar's month.
+    fn render_mode(&self) {
+        // Read the state first: setting the tabs runs their handlers.
+        let month = format!("{:04}-{:02}-", self.ui.calendar.year(), self.ui.calendar.month() + 1);
+        let (diary, written): (bool, Vec<u32>) = {
+            let st = self.state.borrow();
+            let days = st
+                .notes
+                .iter()
+                .filter(|n| is_written(n))
+                .filter_map(|n| diary_date(n.id.clone())?.strip_prefix(&month)?.parse().ok())
+                .collect();
+            (st.mode == Mode::Diary, days)
+        };
+        self.ui.notes_tab.set_active(!diary);
+        self.ui.diary_tab.set_active(diary);
+        self.ui.status_title.set_title(if diary { "日記" } else { "メモ" });
+        self.ui.tag_scroll.set_visible(!diary);
+        self.ui.calendar.set_visible(diary);
+        self.ui.new_button.set_icon_name(if diary { "x-office-calendar-symbolic" } else { "list-add-symbolic" });
+        self.ui.new_button.set_tooltip_text(Some(if diary { "今日の日記" } else { "新規ノート" }));
+        self.ui.empty.set_title(if diary {
+            "カレンダーの日付を選ぶと、その日の日記を書けます"
+        } else {
+            "ノートを選択するか、新規作成してください"
+        });
+        if !diary {
+            return;
+        }
+        self.ui.calendar.clear_marks();
+        for day in written {
+            self.ui.calendar.mark_day(day);
+        }
+    }
+
+    /// Re-renders the list when the calendar shows another month; true if it did.
+    fn calendar_month_changed(self: &Rc<Self>) -> bool {
+        let month = (self.ui.calendar.year(), self.ui.calendar.month());
+        if self.ui.shown_month.replace(month) == month {
+            return false;
+        }
+        self.render_list();
+        true
+    }
+
+    /// Opens the diary entry for a date ("YYYY-MM-DD"), switching to the diary tab.
+    fn open_diary(self: &Rc<Self>, date: &str) {
+        let Some(id) = diary_note_id(date.to_owned()) else { return };
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+            use chrono::Datelike;
+            let shown = self.ui.calendar.date();
+            if (shown.year(), shown.month(), shown.day_of_month()) != (d.year(), d.month() as i32, d.day() as i32) {
+                if let Ok(dt) = glib::DateTime::from_local(d.year(), d.month() as i32, d.day() as i32, 0, 0, 0.0) {
+                    // The month is recorded first, so the selection is not taken as a move.
+                    self.ui.shown_month.set((d.year(), d.month0() as i32));
+                    self.ui.calendar.select_day(&dt);
+                }
+            }
+        }
+        self.set_mode(Mode::Diary);
+        self.select_note(&id);
+        self.render_list();
     }
 
     fn render_tag_bar(self: &Rc<Self>) {
@@ -674,7 +902,12 @@ impl App {
         }
         let (mut tags, filter): (Vec<String>, Filter) = {
             let st = self.state.borrow();
-            let mut t: Vec<String> = st.notes.iter().filter(|n| !n.deleted).flat_map(|n| n.tags.clone()).collect();
+            let mut t: Vec<String> = st
+                .notes
+                .iter()
+                .filter(|n| !n.deleted && diary_date(n.id.clone()).is_none())
+                .flat_map(|n| n.tags.clone())
+                .collect();
             t.sort();
             t.dedup();
             (t, st.filter.clone())
@@ -732,6 +965,10 @@ impl App {
     }
 
     fn new_note(self: &Rc<Self>) {
+        if self.state.borrow().mode == Mode::Diary {
+            self.open_diary(&today());
+            return;
+        }
         let Some(client) = self.client() else { return };
         self.close_current();
         let filter = {
@@ -809,10 +1046,17 @@ impl App {
         self.update_current_summary();
     }
 
-    /// The first line is the title; show it larger.
+    fn current_diary_date(&self) -> Option<String> {
+        self.state.borrow().current.as_ref().and_then(|n| diary_date(n.id()))
+    }
+
+    /// The first line is the title; show it larger. A diary entry has none.
     fn style_title_line(&self) {
         let buffer = &self.ui.buffer;
         buffer.remove_tag_by_name("title", &buffer.start_iter(), &buffer.end_iter());
+        if self.current_diary_date().is_some() {
+            return;
+        }
         let start = buffer.start_iter();
         let mut end = start;
         end.forward_to_line_end();
@@ -823,7 +1067,10 @@ impl App {
     fn update_current_summary(self: &Rc<Self>) {
         let Some(note) = self.state.borrow().current.clone() else { return };
         let summary = note.summary();
-        self.ui.content_page.set_title(if summary.title.is_empty() { "（無題）" } else { &summary.title });
+        match diary_date(summary.id.clone()) {
+            Some(date) => self.ui.content_page.set_title(&format_diary_date(&date)),
+            None => self.ui.content_page.set_title(if summary.title.is_empty() { "（無題）" } else { &summary.title }),
+        }
         {
             let mut st = self.state.borrow_mut();
             match st.notes.iter_mut().find(|n| n.id == summary.id) {
@@ -858,11 +1105,23 @@ impl App {
             self.ui.tags_flow.append(&chip);
         }
         let summary = note.summary();
-        self.ui.dates.set_label(&format!(
-            "作成: {}　更新: {}",
-            format_date(summary.created_at),
-            format_date(summary.updated_at)
-        ));
+        match diary_date(summary.id.clone()) {
+            Some(date) => {
+                let updated = if summary.updated_at > 0 {
+                    format!("　更新: {}", format_date(summary.updated_at))
+                } else {
+                    String::new()
+                };
+                self.ui.dates.set_label(&format!("{}の日記{updated}", format_diary_date(&date)));
+            }
+            None => self.ui.dates.set_label(&format!(
+                "作成: {}　更新: {}",
+                format_date(summary.created_at),
+                format_date(summary.updated_at)
+            )),
+        }
+        // Diary entries do not go to the trash.
+        self.ui.trash_button.set_visible(diary_date(summary.id.clone()).is_none());
         let deleted = note.is_deleted();
         self.ui.trash_button.set_icon_name(if deleted { "edit-undo-symbolic" } else { "user-trash-symbolic" });
         self.ui.trash_button.set_tooltip_text(Some(if deleted { "ゴミ箱から戻す" } else { "ゴミ箱へ" }));
@@ -884,6 +1143,15 @@ impl App {
 
     async fn export_note(self: Rc<Self>) {
         let Some(note) = self.state.borrow().current.clone() else { return };
+        if let Some(date) = diary_date(note.id()) {
+            if let Some(path) = self.save_dialog(&format!("{date}.txt")).await {
+                match std::fs::write(&path, note.body()) {
+                    Ok(()) => self.toast("書き出しました"),
+                    Err(e) => self.toast(&format!("書き出せませんでした: {e}")),
+                }
+            }
+            return;
+        }
         let title = note.summary().title;
         let safe: String = title
             .chars()

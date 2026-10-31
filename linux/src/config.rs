@@ -17,6 +17,9 @@ pub struct Settings {
     /// Line height as a multiple of the font size; 0 for the default.
     #[serde(default)]
     pub line_height: f64,
+    /// The sidebar shows the diary instead of the notes.
+    #[serde(default)]
+    pub diary_mode: bool,
 }
 
 pub const DEFAULT_LINE_HEIGHT: f64 = 1.2;

@@ -71,7 +71,7 @@ There are two kinds of client:
 
 ### 3.7 Full-text search
 
-- Searches the whole body and the tags
+- Searches the whole body and the tags, of notes and diary entries alike (3.13)
 - Whitespace-separated terms narrow the results to notes containing all of them (AND). Up to 10 terms
 - Case-insensitive
 - Japanese matches by substring without word segmentation; terms of one or two characters also work
@@ -95,7 +95,9 @@ There are two kinds of client:
 - **One note**: the ".txt" button in the editor saves the current note's body as a text file. It is generated on the device, so it works offline
 - **All notes**: "すべて書き出し" (Export all) in the settings downloads a zip containing:
   - `<title>.txt` for each note (body only, UTF-8), with the file time set to the note's update time
-  - `notes.json` with each note's file name, ID, title, tags, creation time, and update time (ISO 8601)
+  - Diary entries as `diary/<year>/<month>/<date>.txt` (for example `diary/2024/01/2024-01-02.txt`); days with an empty body are left out
+  - `notes.json` with each note's file name, ID, title, tags, creation time, and update time (ISO 8601), plus the date (`diary`) for diary entries
+- A single diary entry is saved as `<date>.txt`
 - File names are the title with characters not allowed in file names replaced by `_`, cut to 80 characters. An empty title becomes `untitled`; duplicates get a number such as ` (2)`
 - Notes in the trash are left out (the API includes them with `?trash=1`)
 
@@ -123,6 +125,18 @@ There are two kinds of client:
 - Web app: the text's font size (12 to 28, 15 by default) and line height (1.2 to 2.4, 1.6 by default), kept in the browser's localStorage
 - Native apps: the text's typeface (any installed font), size, and line height (1.0 to 3.0, 1.2 by default). "Reset" returns to the system default
 - The line height is the height of a line as a multiple of the font size
+
+### 3.13 Diary
+
+- The "メモ" (Notes) and "日記" (Diary) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
+- The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today is outlined
+- Below the calendar, the shown month's entries are listed, newest day first (date and the start of the text)
+- The "今日" (Today) button in the diary tab opens today's entry. Dates are in the device's time zone
+- An entry's ID follows from its date (5.1), so entries written for the same day on several devices while offline become one entry (merged as in 3.5)
+- Opening a date does not create an entry; writing in it records its creation time. A day with an empty body counts as not written
+- Entries can have tags and use the edit history and restore. Filtering by tag applies to notes only
+- Entries do not go to the trash. To remove one, delete its text (the edit history can bring it back)
+- Search (3.7) covers notes and diary entries alike and finds both from either tab. Entries in the results are labeled "日記" (Diary); choosing one opens that day in the diary tab
 
 ## 4. Architecture
 
@@ -218,6 +232,10 @@ There are two kinds of client:
 ### 5.1 Notes (Yjs documents)
 
 The document name is `note:<id>`, where `<id>` is 1–64 letters, digits, or hyphens.
+
+- A note's `<id>` is a UUID the client generates when creating it
+- A diary entry's `<id>` is `diary-<date>` (for example `diary-2024-01-02`). It follows from the date, so the same day's entry is the same document whichever device writes it. Dates that do not exist (such as February 30) are not diary entries
+- A note without `createdAt` gets it on its first edit (a diary entry is not created just by opening it)
 
 | Key | Type | Contents |
 | --- | --- | --- |

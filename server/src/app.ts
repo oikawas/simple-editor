@@ -8,7 +8,7 @@ import { AuthLimiter, clientAddress, hashToken, newDeviceToken, tokenMatches } f
 import type { Config } from "./config.js";
 import { Store, type Device } from "./db.js";
 import { buildZip, fileNameFor } from "./export.js";
-import { INDEX_DOC, NOTE_PREFIX, bodyOf, noteIdFromDocName, restoreMarkOf, summarize } from "./note.js";
+import { INDEX_DOC, NOTE_PREFIX, bodyOf, diaryDate, noteIdFromDocName, restoreMarkOf, summarize } from "./note.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -235,7 +235,7 @@ export function createApp(config: Config) {
         const includeTrash = url.searchParams.get("trash") === "1";
         const entries = store
           .listNotes()
-          .filter((n) => includeTrash || !n.deleted)
+          .filter((n) => includeTrash || !n.deleted || diaryDate(n.id))
           .flatMap((note) => {
             const doc = currentDoc(note.id);
             return doc ? [{ note, body: bodyOf(doc) }] : [];

@@ -244,6 +244,44 @@ test("exports notes as text files", async () => {
   assert.deepEqual(index[0].tags, ["idea", "work"]);
 });
 
+test("diary entries are one document per day and export by date", async () => {
+  // Two devices write the same day while apart; the entries merge into one.
+  const a = connect("note:diary-2024-01-02");
+  const b = connect("note:diary-2024-01-02");
+  await Promise.all([a.synced, b.synced]);
+  b.websocketProvider.disconnect();
+  await until(() => b.websocketProvider.status === "disconnected");
+  a.doc.getText("body").insert(0, "Morning walk\n");
+  b.doc.getText("body").insert(0, "Evening tea\n");
+  await b.websocketProvider.connect();
+  await until(() => a.doc.getText("body").toString() === b.doc.getText("body").toString());
+  assert.match(a.doc.getText("body").toString(), /Morning walk/);
+  assert.match(a.doc.getText("body").toString(), /Evening tea/);
+  a.close();
+  b.close();
+
+  // A day opened but left empty is not exported.
+  const empty = connect("note:diary-2024-01-03");
+  await empty.synced;
+  empty.doc.getText("body").insert(0, "x");
+  empty.doc.getText("body").delete(0, 1);
+  empty.close();
+
+  await until(async () => {
+    const notes: { id: string }[] = await (await api("/api/notes")).json();
+    return notes.some((n) => n.id === "diary-2024-01-02") && notes.some((n) => n.id === "diary-2024-01-03");
+  });
+  const txt = await api("/api/notes/diary-2024-01-02.txt");
+  assert.match(txt.headers.get("content-disposition") ?? "", /2024-01-02\.txt/);
+
+  const zip = await JSZip.loadAsync(await (await api("/api/export.zip")).arrayBuffer());
+  const body = await zip.file("diary/2024/01/2024-01-02.txt")!.async("string");
+  assert.match(body, /Morning walk/);
+  assert.equal(zip.file("diary/2024/01/2024-01-03.txt"), null);
+  const index = JSON.parse(await zip.file("notes.json")!.async("string"));
+  assert.equal(index.find((e: { id: string }) => e.id === "diary-2024-01-02").diary, "2024-01-02");
+});
+
 test("full-text search matches body text and tags", async () => {
   const c = connect("note:n2");
   await c.synced;

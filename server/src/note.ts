@@ -7,6 +7,9 @@ import * as Y from "yjs";
 //   getMap("tags")   - tag name -> true (map gives set semantics that merge cleanly)
 
 export const NOTE_PREFIX = "note:";
+// A diary entry is the note "diary-YYYY-MM-DD". The id follows from the date,
+// so entries written for the same day on several devices are one document.
+export const DIARY_PREFIX = "diary-";
 export const INDEX_DOC = "__index";
 
 export interface NoteSummary {
@@ -23,6 +26,16 @@ export function noteIdFromDocName(name: string): string | null {
   if (!name.startsWith(NOTE_PREFIX)) return null;
   const id = name.slice(NOTE_PREFIX.length);
   return /^[A-Za-z0-9-]{1,64}$/.test(id) ? id : null;
+}
+
+// The date ("YYYY-MM-DD") of a diary entry's id, or null for an ordinary note.
+export function diaryDate(id: string): string | null {
+  const m = /^diary-(\d{4})-(\d{2})-(\d{2})$/.exec(id);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null;
+  return `${m[1]}-${m[2]}-${m[3]}`;
 }
 
 export function summarize(

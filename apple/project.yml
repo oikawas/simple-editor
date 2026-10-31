@@ -28,8 +28,6 @@ targets:
   SimpleEditor-iOS:
     type: application
     platform: iOS
-    # A shared scheme, so it is listed even when Xcode does not create one.
-    scheme: {}
     sources:
       - path: App
         excludes: [macOS.entitlements]
@@ -48,7 +46,6 @@ targets:
   SimpleEditor-macOS:
     type: application
     platform: macOS
-    scheme: {}
     sources:
       - path: App
         excludes: [macOS.entitlements]
@@ -62,3 +59,21 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/macOS.entitlements
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ENABLE_HARDENED_RUNTIME: YES
+# Shared schemes, so both apps are listed even when Xcode does not create them.
+schemes:
+  SimpleEditor-iOS:
+    build:
+      targets:
+        SimpleEditor-iOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  SimpleEditor-macOS:
+    build:
+      targets:
+        SimpleEditor-macOS: all
+    run:
+      config: Debug
+    archive:
+      config: Release

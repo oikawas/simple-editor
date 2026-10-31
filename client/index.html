@@ -19,8 +19,13 @@
           <span id="status" class="status" title="同期状態"></span>
           <button id="open-settings" title="設定">⚙︎</button>
         </header>
-        <input id="search" type="search" placeholder="検索" autocomplete="off" />
+        <nav id="mode-tabs" class="segmented">
+          <button data-mode="notes">メモ</button>
+          <button data-mode="diary">日記</button>
+        </nav>
+        <input id="search" type="search" placeholder="検索（メモと日記）" autocomplete="off" />
         <nav id="tag-filter"></nav>
+        <section id="calendar"></section>
         <ul id="note-list"></ul>
       </aside>
       <main id="editor-pane">
@@ -33,7 +38,7 @@
         </header>
         <div id="dates" class="dates"></div>
         <div id="editor"></div>
-        <div id="empty" class="empty">ノートを選択するか、新規作成してください</div>
+        <div id="empty" class="empty"><span class="for-notes">ノートを選択するか、新規作成してください</span><span class="for-diary">カレンダーの日付を選ぶと、その日の日記を書けます</span></div>
       </main>
     </div>
 

@@ -157,3 +157,34 @@ dialog h3 { font-size: 14px; margin: 16px 0 6px; }
 #editor .cm-selectionBackground { background: var(--accent-soft) !important; }
 #editor .cm-focused .cm-selectionBackground { background: var(--accent-soft) !important; }
 dialog select { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-side); }
+
+/* notes and diary tabs */
+#mode-tabs { display: flex; margin: 10px 12px 0; }
+#mode-tabs button { flex: 1; padding: 6px 0; }
+#calendar { display: none; padding: 4px 12px 8px; border-bottom: 1px solid var(--line); }
+body.mode-diary #calendar { display: block; }
+body.mode-diary #tag-filter { display: none; }
+.cal-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cal-head .cal-title { flex: 1; text-align: center; font-weight: 600; }
+.cal-head button { padding: 2px 10px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.cal-weekday { font-size: 11px; color: var(--muted); padding: 2px 0; }
+.cal-day { position: relative; border: 0; border-radius: 8px; padding: 6px 0 10px; font-size: 13px; }
+.cal-day.sun, .cal-weekday.sun { color: #dc2626; }
+.cal-day.sat, .cal-weekday.sat { color: #2563eb; }
+.cal-day.today { font-weight: 700; outline: 1px solid var(--accent); outline-offset: -1px; }
+.cal-day.selected { background: var(--accent); color: #fff; }
+.cal-day.written::after {
+  content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px;
+  border-radius: 50%; background: var(--accent);
+}
+.cal-day.selected.written::after { background: #fff; }
+@media (prefers-color-scheme: dark) {
+  .cal-day.sun, .cal-weekday.sun { color: #f87171; }
+  .cal-day.sat, .cal-weekday.sat { color: #60a5fa; }
+}
+#note-list li.diary .title { font-weight: 600; }
+body.is-diary #trash-note { display: none; }
+body.is-diary #editor .cm-line:first-child { font-weight: inherit; font-size: inherit; }
+.empty .for-diary, body.mode-diary .empty .for-notes { display: none; }
+body.mode-diary .empty .for-diary { display: inline; }

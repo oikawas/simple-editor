@@ -92,4 +92,39 @@ final class ServerTests: XCTestCase {
         }
         XCTAssertNil(b.current)
     }
+
+    func testDiary() async throws {
+        let a = makeModel("Mac")
+        a.start()
+        try await a.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
+        try await until("A online") { a.status == .online }
+
+        // Opening a day does not create the entry; writing does.
+        a.openDiary(date: "2024-01-02")
+        XCTAssertEqual(a.mode, .diary)
+        XCTAssertEqual(a.shownMonth, YearMonth(year: 2024, month: 1))
+        let entry = try XCTUnwrap(a.current)
+        XCTAssertEqual(entry.diaryDate, "2024-01-02")
+        XCTAssertTrue(a.visibleNotes.isEmpty)
+        entry.edit("川沿いを散歩した\nサギがいた")
+        a.currentNoteChanged()
+        XCTAssertEqual(a.visibleNotes.map(\.id), ["diary-2024-01-02"])
+        XCTAssertEqual(a.writtenDays, [2])
+        XCTAssertGreaterThan(entry.createdAt, Date(timeIntervalSince1970: 0))
+
+        // Another device sees the day as written; the notes list leaves it out.
+        let b = makeModel("iPhone")
+        b.start()
+        try await b.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
+        try await until("B online") { b.status == .online }
+        b.mode = .diary
+        b.shownMonth = YearMonth(year: 2024, month: 1)
+        try await until("B lists the entry") { b.writtenDays.contains(2) }
+        b.mode = .notes
+        XCTAssertFalse(b.visibleNotes.contains { $0.id == "diary-2024-01-02" })
+
+        // Search covers the diary from the notes tab too.
+        b.searchText = "サギ"
+        try await until("search hit") { b.visibleNotes.contains { $0.id == "diary-2024-01-02" } }
+    }
 }

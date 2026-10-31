@@ -491,7 +491,7 @@ impl App {
         let font = &settings.font;
         let mut rules = vec![format!("line-height: {:.1};", settings.line_height())];
         if !font.is_empty() {
-            let desc = gtk::pango::FontDescription::from_string(&font);
+            let desc = gtk::pango::FontDescription::from_string(font);
             if let Some(family) = desc.family() {
                 rules.push(format!("font-family: \"{}\";", family.replace(['"', '\\'], "")));
             }

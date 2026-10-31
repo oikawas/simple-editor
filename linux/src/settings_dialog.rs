@@ -16,7 +16,9 @@ fn describe(e: &CoreError, registering: bool) -> String {
             "失敗が続いたため、一時的に受け付けを停止しています。{} 分ほど待ってから試してください。",
             retry_after_secs.div_ceil(60)
         ),
-        CoreError::Network { .. } => "サーバーに接続できません。URL とネットワークを確認してください。".into(),
+        CoreError::Network { message } => {
+            format!("サーバーに接続できません。URL とネットワークを確認してください。\n（{message}）")
+        }
         other => format!("エラー: {other}"),
     }
 }

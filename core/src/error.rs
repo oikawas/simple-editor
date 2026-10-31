@@ -34,7 +34,22 @@ impl From<reqwest::Error> for CoreError {
         if e.is_decode() {
             CoreError::other(e)
         } else {
-            CoreError::Network { message: e.to_string() }
+            CoreError::Network { message: with_sources(&e) }
         }
     }
+}
+
+/// The error and its causes, such as a TLS failure behind a failed request.
+pub fn with_sources(e: &dyn std::error::Error) -> String {
+    let mut message = e.to_string();
+    let mut source = e.source();
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        if !message.contains(&text) {
+            message.push_str(": ");
+            message.push_str(&text);
+        }
+        source = cause.source();
+    }
+    message
 }

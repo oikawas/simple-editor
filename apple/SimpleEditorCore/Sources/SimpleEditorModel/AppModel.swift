@@ -323,8 +323,8 @@ public final class AppModel {
             return registering ? "登録用トークンが違います。" : "この端末の登録が無効になっています。"
         case .RateLimited(let seconds)?:
             return "失敗が続いたため、一時的に受け付けを停止しています。\((seconds + 59) / 60) 分ほど待ってから試してください。"
-        case .Network?:
-            return "サーバーに接続できません。URL とネットワークを確認してください。"
+        case .Network(let message)?:
+            return "サーバーに接続できません。URL とネットワークを確認してください。\n（\(message)）"
         case .NotFound?:
             return "見つかりませんでした。"
         case .Server(let status)?:

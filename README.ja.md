@@ -65,11 +65,11 @@ docker compose up -d --build
 
 ### 1. ルート証明書をインストールする（端末ごとに初回のみ）
 
-端末のブラウザで `http://<SERVER_IP>/ca.crt` を開いてダウンロードし、次の手順で信頼させます。
+端末のブラウザで `http://<SERVER_IP>/ca.crt` を開いてダウンロードし、次の手順で信頼させます（`HTTP_PORT` を 80 以外にした場合は `http://<SERVER_IP>:<HTTP_PORT>/ca.crt`）。
 
 | 端末 | 手順 |
 | --- | --- |
-| iPhone | Safari で開いて「許可」→「設定 → 一般 → VPN とデバイス管理」でプロファイルをインストール →「設定 → 一般 → 情報 → 証明書信頼設定」でこの証明書を有効にする |
+| iPhone・iPad | 下の「iPhone・iPad の場合」 |
 | macOS | ダウンロードしたファイルを開いてキーチェーンに追加 →「キーチェーンアクセス」でこの証明書を開き、「信頼」を「常に信頼」にする |
 | Android | 「設定 → セキュリティ → 暗号化と認証情報 → 証明書のインストール → CA 証明書」でダウンロードしたファイルを選ぶ（メニュー名は機種により異なります） |
 
@@ -78,6 +78,15 @@ docker compose up -d --build
 ```sh
 openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint -sha256
 ```
+
+#### iPhone・iPad の場合
+
+1. **Safari** で `http://<SERVER_IP>/ca.crt` を開く（`https` ではなく `http`。ほかのブラウザでは構成プロファイルとしてダウンロードできない）。「このWebサイトは構成プロファイルをダウンロードしようとしています」と出たら「許可」→「閉じる」
+2. 「設定」を開き、上部の「ダウンロード済みのプロファイル」（出ていなければ「一般 → VPN とデバイス管理」のプロファイル）をタップ →「インストール」→ パスコード →「インストール」→「完了」。「未署名」と表示されるが、自分のサーバーの証明書なので問題ない。プロファイルの「詳細」→ 証明書で、SHA-256 フィンガープリントをサーバー上の値と照合できる
+3. **「設定 → 一般 → 情報 → 証明書信頼設定」で、この証明書（Caddy Local Authority）のスイッチをオンにする。** インストールしただけでは信頼されず、HTTPS で接続できない
+4. Safari で `https://<SERVER_IP>/` を開き、警告なしで表示されれば完了
+
+サーバーの `./caddy` を消すと証明書が作り直されます。その場合は「一般 → VPN とデバイス管理」から古いプロファイルを削除して、手順をやり直してください。
 
 ### 2. アプリを開く
 
@@ -111,18 +120,42 @@ install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/
 
 Mac で Xcode を使ってビルドします。macOS 15 以上、iOS 18 以上で動きます。
 
-必要なもの: Xcode 16 以上、Rust（rustup）、[XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）
+必要なもの: Xcode 16 以上、Rust（rustup。Homebrew の Rust ではなく rustup を使う）、[XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）。iPhone 向けにビルドするには、Xcode の「Settings… → Components」で iOS プラットフォームをダウンロードしておきます。
+
+### ビルドの準備
 
 ```sh
 ./apple/build-xcframework.sh          # Rust のコアを macOS・iOS 向けにビルドする（初回は数分かかる）
 cd apple
 DEVELOPMENT_TEAM=<チーム ID> xcodegen generate
-open SimpleEditor.xcodeproj           # SimpleEditor-macOS か SimpleEditor-iOS を選んで実行
+open SimpleEditor.xcodeproj
 ```
 
-- チーム ID は Apple Developer のアカウントページ（Membership）で確認できます。指定しなかった場合は、Xcode の Signing & Capabilities で選んでください
-- コアを変更したら `build-xcframework.sh` を実行し直します
-- iPhone では、事前にサーバーのルート証明書をインストールしておきます（上の「各端末の準備」）。初回起動時に、ローカルネットワークへの接続の許可を求められるので許可してください
+- チーム ID は Apple Developer のアカウントページ（Membership）で確認できます。指定しなかった場合は、Xcode でターゲットの「Signing & Capabilities」の Team を選んでください
+- `SimpleEditor.xcodeproj` は `project.yml` から作るもので、リポジトリには入れていません。`project.yml` が変わったとき（`git pull` のあとなど）は、Xcode を終了してから `xcodegen generate` を実行し直します
+- コアを変更したときは `build-xcframework.sh` を実行し直します
+- Xcode が作る `apple/SimpleEditorCore/.swiftpm/` は端末ごとの作業データで、コミットしません（`.gitignore` 済み）
+
+### Mac で動かす
+
+ウィンドウ上部中央のスキームで **SimpleEditor-macOS**、行き先で **My Mac** を選び、「Product → Run」（⌘R）で実行します。
+
+### iPhone で動かす
+
+1. iPhone にサーバーのルート証明書を入れて信頼させておく（上の「iPhone・iPad の場合」）
+2. iPhone を USB ケーブルで Mac につなぎ、「このコンピュータを信頼」する
+3. iPhone の「設定 → プライバシーとセキュリティ → デベロッパモード」をオンにする（再起動後に「オンにする」）。この項目は、一度 Xcode に iPhone をつなぐと表示される
+4. Xcode でスキームを **SimpleEditor-iOS**、行き先を **自分の iPhone** にして ⌘R で実行する。「Any iOS Device」を選ぶとビルドだけで iPhone には入らない。⌘B（Build）も同じ
+5. 「信頼されていないデベロッパ」と出て起動しないときは、iPhone の「設定 → 一般 → VPN とデバイス管理」で自分の開発元を「信頼」し、もう一度 ⌘R
+6. 初回起動時に、ローカルネットワークへの接続の許可を求められるので「許可」する。許可しなかった場合は「設定 → プライバシーとセキュリティ → ローカルネットワーク」で Simple Editor をオンにする
+7. 登録画面でサーバー URL（`https://<SERVER_IP>`。`https://` は省略可）、端末名、登録用トークン（`.env` の `AUTH_TOKEN`）を入れて「登録」。トークンは Mac でコピーすれば、ユニバーサルクリップボードで iPhone に貼り付けられる
+
+- 無料の Apple ID（Personal Team）で署名したアプリは 7 日で起動しなくなります。Xcode からもう一度実行すれば入れ直せます（Apple Developer Program なら 1 年）
+- シミュレーターで試すときは、`ca.crt` をシミュレーターの画面にドラッグして、「iPhone・iPad の場合」の手順 2・3 で信頼させます
+- 「サーバーに接続できません」と出るときは、Safari で `https://<SERVER_IP>/` が警告なしで開けるか（証明書）、ローカルネットワークの許可、同じ LAN の Wi-Fi につながっているかを確認します
+
+### その他
+
 - 端末トークンはキーチェーンに保存します。ノートはアプリのデータ領域にも保存され、オフラインでも読み書きできます
 - 画面に依存しない部分（`apple/SimpleEditorCore` の `SimpleEditorModel`）は、Mac でも Linux でも `swift test` でテストできます。`SIMPLE_EDITOR_TEST_SERVER`（サーバー URL）と `SIMPLE_EDITOR_TEST_TOKEN`（登録用トークン）を設定すると、実際のサーバーを相手に 2 台分の操作を確認します。Linux では先に `./apple/generate-bindings.sh` を実行します
 

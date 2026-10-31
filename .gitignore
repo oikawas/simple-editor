@@ -11,3 +11,5 @@ apple/SimpleEditorCore/Sources/simple_editor_coreFFI/simple_editor_coreFFI.h
 apple/SimpleEditorCore/simple_editor_coreFFI.xcframework/
 apple/SimpleEditorCore/.build/
 apple/*.xcodeproj/
+# Xcode's per-user state for Swift packages
+.swiftpm/

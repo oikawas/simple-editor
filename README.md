@@ -71,11 +71,11 @@ docker compose up -d --build
 
 ### 1. Install the root certificate (once per device)
 
-Open `http://<SERVER_IP>/ca.crt` in the device's browser to download it, then trust it as follows.
+Open `http://<SERVER_IP>/ca.crt` in the device's browser to download it, then trust it as follows (`http://<SERVER_IP>:<HTTP_PORT>/ca.crt` if `HTTP_PORT` is not 80).
 
 | Device | Steps |
 | --- | --- |
-| iPhone | Open it in Safari and tap Allow → install the profile in Settings → General → VPN & Device Management → turn on trust for it in Settings → General → About → Certificate Trust Settings |
+| iPhone and iPad | See "On iPhone and iPad" below |
 | macOS | Open the downloaded file to add it to the keychain → open the certificate in Keychain Access and set Trust to Always Trust |
 | Android | Choose the downloaded file in Settings → Security → Encryption & credentials → Install a certificate → CA certificate (menu names vary by manufacturer) |
 
@@ -84,6 +84,15 @@ The certificate is served over plain HTTP, so before installing it, compare the 
 ```sh
 openssl x509 -in caddy/caddy/pki/authorities/local/root.crt -noout -fingerprint -sha256
 ```
+
+#### On iPhone and iPad
+
+1. Open `http://<SERVER_IP>/ca.crt` in **Safari** (`http`, not `https`; other browsers cannot download it as a configuration profile). When it says the website is trying to download a configuration profile, tap Allow, then Close
+2. Open Settings and tap "Profile Downloaded" near the top (or the profile under General → VPN & Device Management) → Install → passcode → Install → Done. It is shown as "Not Signed", which is expected for your own server's certificate. Under the profile's More Details → the certificate, you can compare the SHA-256 fingerprint with the value on the server
+3. **In Settings → General → About → Certificate Trust Settings, turn on the switch for this certificate (Caddy Local Authority).** Installing it alone does not make it trusted, and HTTPS connections fail
+4. Open `https://<SERVER_IP>/` in Safari; if it opens without a warning, you are done
+
+Deleting the server's `./caddy` creates a new certificate. Then remove the old profile under General → VPN & Device Management and repeat these steps.
 
 ### 2. Open the app
 
@@ -117,18 +126,42 @@ install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/
 
 Built on a Mac with Xcode. It runs on macOS 15 or later and iOS 18 or later.
 
-Requirements: Xcode 16 or later, Rust (rustup), and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+Requirements: Xcode 16 or later, Rust (rustup, not Homebrew's Rust), and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). To build for iPhone, download the iOS platform in Xcode under Settings… → Components.
+
+### Preparing the build
 
 ```sh
 ./apple/build-xcframework.sh          # builds the Rust core for macOS and iOS (a few minutes the first time)
 cd apple
 DEVELOPMENT_TEAM=<team ID> xcodegen generate
-open SimpleEditor.xcodeproj           # pick SimpleEditor-macOS or SimpleEditor-iOS and run
+open SimpleEditor.xcodeproj
 ```
 
-- Your team ID is on the Membership page of your Apple Developer account. Without it, choose the team under Signing & Capabilities in Xcode
+- Your team ID is on the Membership page of your Apple Developer account. Without it, choose the Team under the target's Signing & Capabilities in Xcode
+- `SimpleEditor.xcodeproj` is generated from `project.yml` and is not in the repository. When `project.yml` changes (after `git pull`, for example), quit Xcode and run `xcodegen generate` again
 - Run `build-xcframework.sh` again after changing the core
-- On iPhone, install the server's root certificate first ("Preparing each device" above). Allow access to the local network when asked on first launch
+- `apple/SimpleEditorCore/.swiftpm/`, created by Xcode, is per-user state and is not committed (it is in `.gitignore`)
+
+### Running on a Mac
+
+Choose the scheme **SimpleEditor-macOS** and the destination **My Mac** at the top center of the window, then Product → Run (⌘R).
+
+### Running on an iPhone
+
+1. Install and trust the server's root certificate on the iPhone ("On iPhone and iPad" above)
+2. Connect the iPhone to the Mac with a USB cable and tap "Trust This Computer"
+3. Turn on Settings → Privacy & Security → Developer Mode on the iPhone (and "Turn On" after it restarts). The item appears once the iPhone has been connected to Xcode
+4. In Xcode, choose the scheme **SimpleEditor-iOS** and **your iPhone** as the destination, then press ⌘R. "Any iOS Device" only builds and does not install on the iPhone, and neither does ⌘B (Build)
+5. If it does not open because of an "Untrusted Developer", trust your developer under Settings → General → VPN & Device Management on the iPhone and press ⌘R again
+6. Allow access to the local network when asked on first launch. If you did not, turn on Simple Editor under Settings → Privacy & Security → Local Network
+7. On the registration screen, enter the server URL (`https://<SERVER_IP>`; `https://` may be left out), a device name, and the registration token (`AUTH_TOKEN` in `.env`), then tap Register. Copying the token on the Mac lets you paste it on the iPhone through Universal Clipboard
+
+- An app signed with a free Apple ID (Personal Team) stops opening after 7 days; run it from Xcode again to reinstall (one year with the Apple Developer Program)
+- To try it in the simulator, drag `ca.crt` onto the simulator's screen and trust it with steps 2 and 3 of "On iPhone and iPad"
+- If it says it cannot reach the server, check that `https://<SERVER_IP>/` opens in Safari without a warning (the certificate), the local network permission, and that the iPhone is on the same LAN's Wi-Fi
+
+### Other notes
+
 - The device token is kept in the Keychain. Notes are also kept in the app's data, so they can be read and edited offline
 - The UI-independent part (`SimpleEditorModel` in `apple/SimpleEditorCore`) can be tested with `swift test` on a Mac or on Linux. With `SIMPLE_EDITOR_TEST_SERVER` (server URL) and `SIMPLE_EDITOR_TEST_TOKEN` (registration token) set, it drives two devices against a real server. On Linux, run `./apple/generate-bindings.sh` first
 

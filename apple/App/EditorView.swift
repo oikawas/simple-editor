@@ -14,7 +14,7 @@ struct EditorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             tagBar
-            Text("作成: \(note.createdAt.formatted(date: .numeric, time: .shortened))　更新: \(note.updatedAt.formatted(date: .numeric, time: .shortened))")
+            Text(datesLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
@@ -25,7 +25,7 @@ struct EditorView: View {
                 onEdit: { model.currentNoteChanged() }
             )
         }
-        .navigationTitle(note.title.isEmpty ? "（無題）" : note.title)
+        .navigationTitle(note.diaryDate.map(Diary.format) ?? (note.title.isEmpty ? "（無題）" : note.title))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -33,10 +33,13 @@ struct EditorView: View {
             ToolbarItemGroup {
                 Button("編集履歴", systemImage: "clock.arrow.circlepath") { showHistory = true }
                 Button("テキストとして書き出し", systemImage: "square.and.arrow.up") { exporting = true }
-                Button(note.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ",
-                       systemImage: note.deleted ? "arrow.uturn.backward" : "trash") {
-                    note.setDeleted(!note.deleted)
-                    model.currentNoteChanged()
+                // Diary entries do not go to the trash.
+                if note.diaryDate == nil {
+                    Button(note.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ",
+                           systemImage: note.deleted ? "arrow.uturn.backward" : "trash") {
+                        note.setDeleted(!note.deleted)
+                        model.currentNoteChanged()
+                    }
                 }
             }
         }
@@ -44,9 +47,18 @@ struct EditorView: View {
             HistoryView(note: note)
         }
         .fileExporter(isPresented: $exporting, document: TextFile(text: note.text), contentType: .plainText,
-                      defaultFilename: TextFile.filename(for: note.title)) { result in
+                      defaultFilename: note.diaryDate.map { "\($0).txt" } ?? TextFile.filename(for: note.title)) { result in
             if case .failure(let error) = result { model.errorMessage = error.localizedDescription }
         }
+    }
+
+    private var datesLine: String {
+        let created = note.createdAt.formatted(date: .numeric, time: .shortened)
+        let updated = note.updatedAt.formatted(date: .numeric, time: .shortened)
+        guard let date = note.diaryDate else { return "作成: \(created)　更新: \(updated)" }
+        // An entry not written yet has no times.
+        let written = note.updatedAt.timeIntervalSince1970 > 0
+        return "\(Diary.format(date))の日記" + (written ? "　更新: \(updated)" : "")
     }
 
     private var tagBar: some View {

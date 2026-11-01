@@ -51,6 +51,12 @@ public final class AppModel {
     public private(set) var notes: [NoteSummary] = []
     public private(set) var current: OpenNote?
     public var filter: NoteFilter = .all
+    /// Notes or the diary; kept per device.
+    public var mode: SidebarMode = .notes {
+        didSet { defaults.set(mode.rawValue, forKey: Self.modeKey) }
+    }
+    /// The month the diary's calendar shows.
+    public var shownMonth = YearMonth(date: Diary.today)!
     public var searchText = "" {
         didSet { if searchText != oldValue { searchChanged() } }
     }
@@ -66,6 +72,7 @@ public final class AppModel {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
+    private static let modeKey = "sidebarMode"
 
     public init(tokens: TokenStore, defaults: UserDefaults = .standard, dataDirectory: URL, defaultDeviceName: String) {
         self.tokens = tokens
@@ -74,6 +81,7 @@ public final class AppModel {
         var settings = StoredSettings.load(from: defaults)
         if settings.deviceName.isEmpty { settings.deviceName = defaultDeviceName }
         self.settings = settings
+        self.mode = defaults.string(forKey: Self.modeKey).flatMap(SidebarMode.init) ?? .notes
     }
 
     /// Connects with the stored token, or asks for registration.
@@ -198,14 +206,26 @@ public final class AppModel {
         searchHits = hits.map { Dictionary($0.map { ($0.id, $0.snippet) }, uniquingKeysWith: { a, _ in a }) }
     }
 
-    /// The notes to list for the current filter and search, newest first.
-    /// Matches are the server's full-text hits plus local matches on title,
-    /// preview, tags, and the open note's text (which also works offline).
+    /// The notes to list, newest first: without a search, the notes for the
+    /// filter, or the shown month's diary entries (newest day first). A search
+    /// covers notes and diary entries alike, in either mode. Matches are the
+    /// server's full-text hits plus local matches on title, preview, tags, and
+    /// the open note's text (which also works offline).
     public var visibleNotes: [ListedNote] {
         let terms = searchText.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        if terms.isEmpty && mode == .diary {
+            return notes
+                .filter { isWritten($0) && Diary.date(ofNote: $0.id).map(shownMonth.contains) == true }
+                .sorted { $0.id > $1.id }
+                .map { ListedNote(summary: $0, snippet: nil) }
+        }
+        let filter = mode == .notes ? self.filter : .all
         let openBody = current.map { ($0.id, $0.text.lowercased()) }
         return notes
-            .filter { filter == .trash ? $0.deleted : !$0.deleted }
+            .filter { note in
+                if Diary.date(ofNote: note.id) != nil { return !terms.isEmpty && filter != .trash && isWritten(note) }
+                return filter == .trash ? note.deleted : !note.deleted
+            }
             .filter { if case .tag(let t) = filter { return $0.tags.contains(t) } else { return true } }
             .compactMap { note in
                 if terms.isEmpty { return ListedNote(summary: note, snippet: nil) }
@@ -219,7 +239,27 @@ public final class AppModel {
 
     /// Tags on notes outside the trash.
     public var allTags: [String] {
-        Array(Set(notes.filter { !$0.deleted }.flatMap(\.tags))).sorted()
+        Array(Set(notes.filter { !$0.deleted && Diary.date(ofNote: $0.id) == nil }.flatMap(\.tags))).sorted()
+    }
+
+    /// A diary day counts as written once it has some text.
+    private func isWritten(_ note: NoteSummary) -> Bool { !note.title.isEmpty }
+
+    /// Days of the shown month with something written, for the calendar.
+    public var writtenDays: Set<Int> {
+        Set(notes.compactMap { note in
+            guard isWritten(note), let date = Diary.date(ofNote: note.id), shownMonth.contains(date) else { return nil }
+            return Int(date.suffix(2))
+        })
+    }
+
+    /// Opens the diary entry for a date ("YYYY-MM-DD") and shows the diary.
+    /// The entry is created by writing in it.
+    public func openDiary(date: String) {
+        guard let id = diaryNoteId(date: date) else { return }
+        mode = .diary
+        if let month = YearMonth(date: date) { shownMonth = month }
+        select(id: id)
     }
 
     private func updateListEntry(_ summary: NoteSummary) {
@@ -248,6 +288,7 @@ public final class AppModel {
     public func createNote() -> OpenNote? {
         guard let client else { return nil }
         closeCurrent()
+        mode = .notes
         if filter == .trash { filter = .all }
         do {
             let open = OpenNote(note: try client.createNote())

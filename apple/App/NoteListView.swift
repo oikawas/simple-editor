@@ -16,14 +16,45 @@ struct NoteListView: View {
                     .tag(item.id)
             }
         }
-        .searchable(text: $model.searchText, prompt: "検索")
-        .safeAreaInset(edge: .top) { TagFilterBar() }
+        .searchable(text: $model.searchText, prompt: "検索（メモと日記）")
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                Picker("表示", selection: $model.mode) {
+                    Text("メモ").tag(SidebarMode.notes)
+                    Text("日記").tag(SidebarMode.diary)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal)
+                .padding(.top, 6)
+                if model.mode == .notes {
+                    TagFilterBar()
+                } else {
+                    DiaryCalendarView()
+                }
+            }
+            .background(.bar)
+        }
         .safeAreaInset(edge: .bottom) { StatusBar() }
-        .navigationTitle("メモ")
+        .overlay {
+            if model.mode == .diary, model.searchText.isEmpty, model.visibleNotes.isEmpty {
+                Text("この月の日記はまだありません。カレンダーの日付を選ぶと書けます")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+            }
+        }
+        .navigationTitle(model.mode == .diary ? "日記" : "メモ")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("新規ノート", systemImage: "square.and.pencil") { model.createNote() }
-                    .disabled(model.phase != .ready)
+                if model.mode == .diary {
+                    Button("今日の日記", systemImage: "calendar") { model.openDiary(date: Diary.today) }
+                        .disabled(model.phase != .ready)
+                } else {
+                    Button("新規ノート", systemImage: "square.and.pencil") { model.createNote() }
+                        .disabled(model.phase != .ready)
+                }
             }
             ToolbarItem {
                 Menu("その他", systemImage: "ellipsis.circle") {
@@ -41,7 +72,15 @@ struct NoteListView: View {
     }
 
     private var selection: Binding<String?> {
-        Binding(get: { model.current?.id }, set: { id in if let id { model.select(id: id) } else { model.closeCurrent() } })
+        Binding(get: { model.current?.id }, set: { id in
+            if let id, let date = Diary.date(ofNote: id) {
+                model.openDiary(date: date)
+            } else if let id {
+                model.select(id: id)
+            } else {
+                model.closeCurrent()
+            }
+        })
     }
 
     private func exportAll() {
@@ -62,16 +101,31 @@ private struct NoteRow: View {
     let query: String
 
     var body: some View {
+        let date = Diary.date(ofNote: item.id)
         VStack(alignment: .leading, spacing: 2) {
-            Text(item.summary.title.isEmpty ? "（無題）" : item.summary.title)
-                .font(.headline)
-                .lineLimit(1)
-            Text(item.snippet ?? item.summary.preview)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if let date {
+                Text(Diary.format(date))
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(item.snippet ?? [item.summary.title, item.summary.preview].filter { !$0.isEmpty }.joined(separator: " "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(item.summary.title.isEmpty ? "（無題）" : item.summary.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(item.snippet ?? item.summary.preview)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             HStack(spacing: 6) {
-                Text(Date(timeIntervalSince1970: Double(item.summary.updatedAt) / 1000), format: .dateTime.year().month().day().hour().minute())
+                if date == nil {
+                    Text(Date(timeIntervalSince1970: Double(item.summary.updatedAt) / 1000), format: .dateTime.year().month().day().hour().minute())
+                } else if !query.isEmpty {
+                    Text("日記")
+                }
                 ForEach(item.summary.tags, id: \.self) { Text("#\($0)") }
             }
             .font(.caption)

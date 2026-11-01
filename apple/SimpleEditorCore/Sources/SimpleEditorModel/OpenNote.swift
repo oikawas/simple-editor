@@ -108,6 +108,9 @@ public final class OpenNote: Identifiable {
 
     public var summary: NoteSummary { note.summary() }
 
+    /// The date of a diary entry, or nil for an ordinary note.
+    public var diaryDate: String? { Diary.date(ofNote: id) }
+
     func reloadMeta() {
         let s = note.summary()
         title = s.title

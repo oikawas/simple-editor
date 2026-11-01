@@ -35,6 +35,36 @@ pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
+/// The id of the diary entry for a date ("YYYY-MM-DD"). The id follows from
+/// the date, so entries written for the same day on several devices are one
+/// document. Returns `None` for a date that does not exist.
+#[uniffi::export]
+pub fn diary_note_id(date: String) -> Option<String> {
+    let id = format!("diary-{date}");
+    diary_date(id.clone()).map(|_| id)
+}
+
+/// The date ("YYYY-MM-DD") of a diary entry's id, or `None` for an ordinary note.
+#[uniffi::export]
+pub fn diary_date(id: String) -> Option<String> {
+    let date = id.strip_prefix("diary-")?;
+    let parts: Vec<&str> = date.split('-').collect();
+    let [y, m, d] = parts.as_slice() else { return None };
+    if y.len() != 4 || m.len() != 2 || d.len() != 2 || !date.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+        return None;
+    }
+    let (y, m, d): (u32, u32, u32) = (y.parse().ok()?, m.parse().ok()?, d.parse().ok()?);
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let days = match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    (1..=days).contains(&d).then(|| date.to_owned())
+}
+
 pub fn normalize_tag(raw: &str) -> String {
     let joined = raw.split_whitespace().collect::<Vec<_>>().join("-");
     joined.chars().take(64).collect()
@@ -119,7 +149,16 @@ impl NoteDoc {
     fn edit(&self, f: impl FnOnce(&mut TransactionMut)) {
         let mut txn = self.doc.transact_mut();
         f(&mut txn);
-        self.meta.insert(&mut txn, "updatedAt", timestamp(now_ms()));
+        self.touch(&mut txn, now_ms());
+    }
+
+    /// Stamps the update time, and the creation time on a note's first edit
+    /// (a diary entry is opened without one and created by writing in it).
+    fn touch(&self, txn: &mut TransactionMut, now: i64) {
+        if self.meta_number(txn, "createdAt").is_none() {
+            self.meta.insert(txn, "createdAt", timestamp(now));
+        }
+        self.meta.insert(txn, "updatedAt", timestamp(now));
     }
 
     /// Sets up a brand-new note.
@@ -143,7 +182,7 @@ impl NoteDoc {
         if !inserted.is_empty() {
             self.body.insert(&mut txn, start, &inserted);
         }
-        self.meta.insert(&mut txn, "updatedAt", timestamp(now_ms()));
+        self.touch(&mut txn, now_ms());
     }
 
     /// Replaces `delete` UTF-16 units at `start` with `insert`, as reported by
@@ -205,7 +244,7 @@ impl NoteDoc {
             self.tags.insert(&mut txn, t.clone(), Any::Bool(true));
         }
         self.meta.insert(&mut txn, "restoredAt", timestamp(now));
-        self.meta.insert(&mut txn, "updatedAt", timestamp(now));
+        self.touch(&mut txn, now);
     }
 
     pub fn summary(&self, id: &str) -> NoteSummary {
@@ -328,5 +367,21 @@ mod tests {
         assert_eq!(n.body(), "old body");
         assert_eq!(n.tags(), vec!["a"]);
         assert!(n.meta_json().contains("restoredAt"));
+    }
+
+    #[test]
+    fn diary_ids() {
+        assert_eq!(diary_note_id("2024-02-29".into()).as_deref(), Some("diary-2024-02-29"));
+        assert_eq!(diary_note_id("2023-02-29".into()), None);
+        assert_eq!(diary_note_id("2024-13-01".into()), None);
+        assert_eq!(diary_note_id("24-01-01".into()), None);
+        assert_eq!(diary_date("diary-2024-01-02".into()).as_deref(), Some("2024-01-02"));
+        assert_eq!(diary_date("6f1c2e1a-0000-4000-8000-000000000000".into()), None);
+
+        // A diary entry gets its creation time from the first edit.
+        let n = NoteDoc::new();
+        assert_eq!(n.created_at(), None);
+        n.edit_body(0, 0, "Today");
+        assert!(n.created_at().is_some());
     }
 }

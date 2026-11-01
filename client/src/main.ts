@@ -4,6 +4,16 @@ import { EditorView, keymap, placeholder, drawSelection } from "@codemirror/view
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
+import {
+  diaryDate,
+  diaryId,
+  formatDiaryDate,
+  inMonth,
+  monthOf,
+  renderCalendar,
+  today,
+  type Month,
+} from "./diary";
 import { lineDiff, restoreVersion, type Version, type VersionInfo } from "./history";
 import { newId, normalizeTag, summarize, type NoteSummary } from "./notes";
 import { applyDisplay, loadDisplay, loadSettings, saveDisplay, saveSettings, type Settings } from "./settings";
@@ -20,6 +30,16 @@ let sync: SyncClient | null = null;
 let notes = new Map<string, NoteSummary>(loadCache());
 let current: { note: OpenNote; view: EditorView; dispose: () => void } | null = null;
 let filterTag: string | null = null;
+
+// The sidebar shows either notes or the diary; the choice is kept per device.
+type Mode = "notes" | "diary";
+const MODE_KEY = "simple-editor:mode";
+let mode: Mode = localStorage.getItem(MODE_KEY) === "diary" ? "diary" : "notes";
+let calendarMonth: Month = monthOf(today());
+
+const isDiary = (n: NoteSummary) => diaryDate(n.id) !== null;
+// A diary day counts as written once it has some text.
+const isWritten = (n: NoteSummary) => n.title !== "";
 
 function loadCache(): [string, NoteSummary][] {
   try {
@@ -124,12 +144,21 @@ function serverHits(): Map<string, string> | null {
   return searchResults && searchResults.query === searchQuery() ? searchResults.hits : null;
 }
 
+// Without a search: the notes (or the trash, or a tag), or the month's diary
+// entries. A search covers notes and diary entries alike, in either tab.
 function visibleNotes(): NoteSummary[] {
   const terms = searchTerms();
   const hits = serverHits();
-  return [...notes.values()]
-    .filter((n) => (filterTag === TRASH ? n.deleted : !n.deleted))
-    .filter((n) => !filterTag || filterTag === TRASH || n.tags.includes(filterTag))
+  const all = [...notes.values()];
+  if (terms.length === 0 && mode === "diary") {
+    return all
+      .filter((n) => isDiary(n) && isWritten(n) && inMonth(diaryDate(n.id)!, calendarMonth))
+      .sort((a, b) => b.id.localeCompare(a.id));
+  }
+  const tag = mode === "notes" ? filterTag : null;
+  return all
+    .filter((n) => (isDiary(n) ? terms.length > 0 && tag !== TRASH && isWritten(n) : tag === TRASH ? n.deleted : !n.deleted))
+    .filter((n) => !tag || tag === TRASH || n.tags.includes(tag))
     .filter((n) => terms.length === 0 || hits?.has(n.id) || matchesLocally(n, terms))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -151,34 +180,93 @@ function renderList(): void {
   const terms = searchTerms();
   const hits = serverHits();
   const items = visibleNotes().map((n) => {
+    const date = diaryDate(n.id);
     const li = document.createElement("li");
-    li.className = current?.note.id === n.id ? "selected" : "";
-    li.onclick = () => void selectNote(n.id);
+    li.className = (current?.note.id === n.id ? "selected" : "") + (date ? " diary" : "");
+    li.onclick = () => void (date ? openDiary(date) : selectNote(n.id));
     const title = document.createElement("div");
     title.className = "title";
-    title.append(...highlighted(n.title || "（無題）", terms));
     const preview = document.createElement("div");
     preview.className = "preview";
-    preview.append(...highlighted((terms.length && hits?.get(n.id)) || n.preview, terms));
+    const snippet = terms.length ? hits?.get(n.id) : undefined;
+    if (date) {
+      title.textContent = formatDiaryDate(date);
+      preview.append(...highlighted(snippet || [n.title, n.preview].filter(Boolean).join(" "), terms));
+    } else {
+      title.append(...highlighted(n.title || "（無題）", terms));
+      preview.append(...highlighted(snippet || n.preview, terms));
+    }
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.textContent = [formatDate(n.updatedAt), ...n.tags.map((t) => `#${t}`)].join("  ");
+    // In search results diary entries are marked as such; the diary tab needs no mark.
+    const kind = date ? (terms.length ? "日記" : "") : formatDate(n.updatedAt);
+    meta.textContent = [kind, ...n.tags.map((t) => `#${t}`)].filter(Boolean).join("  ");
     li.append(title, preview, meta);
     return li;
   });
+  if (mode === "diary" && terms.length === 0 && items.length === 0) {
+    items.push(listNotice("この月の日記はまだありません。カレンダーの日付を選ぶと書けます"));
+  }
   if (terms.length && !hits && $("status").dataset.state !== "online") {
-    const note = document.createElement("li");
-    note.className = "notice";
-    note.textContent = "オフラインのため、本文はこの端末で開いているノートだけを検索しています";
-    items.push(note);
+    items.push(listNotice("オフラインのため、本文はこの端末で開いているノートだけを検索しています"));
   }
   list.replaceChildren(...items);
   renderTagFilter();
+  renderMode();
+}
+
+function listNotice(text: string): HTMLLIElement {
+  const li = document.createElement("li");
+  li.className = "notice";
+  li.textContent = text;
+  return li;
+}
+
+// ---- notes and diary tabs --------------------------------------------------
+
+function setMode(next: Mode): void {
+  mode = next;
+  localStorage.setItem(MODE_KEY, mode);
+  renderList();
+}
+
+function renderMode(): void {
+  document.body.classList.toggle("mode-diary", mode === "diary");
+  document.querySelectorAll<HTMLButtonElement>("#mode-tabs button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  const add = $("new-note");
+  add.textContent = mode === "diary" ? "今日" : "＋ 新規";
+  add.title = mode === "diary" ? "今日の日記" : "新規ノート";
+  if (mode !== "diary") return;
+  const written = new Set<string>();
+  for (const n of notes.values()) {
+    const date = diaryDate(n.id);
+    if (date && isWritten(n)) written.add(date);
+  }
+  renderCalendar($("calendar"), {
+    month: calendarMonth,
+    selected: current ? diaryDate(current.note.id) : null,
+    written,
+    onPick: (date) => void openDiary(date),
+    onMonth: (month) => {
+      calendarMonth = month;
+      renderList();
+    },
+  });
+}
+
+// Opens the diary entry for a date, switching to the diary tab.
+async function openDiary(date: string): Promise<void> {
+  calendarMonth = monthOf(date);
+  if (mode !== "diary") setMode("diary");
+  await selectNote(diaryId(date));
+  renderList();
 }
 
 function renderTagFilter(): void {
   const tags = new Set<string>();
-  for (const n of notes.values()) if (!n.deleted) n.tags.forEach((t) => tags.add(t));
+  for (const n of notes.values()) if (!n.deleted && !isDiary(n)) n.tags.forEach((t) => tags.add(t));
   const chip = (label: string, value: string | null) => {
     const b = document.createElement("button");
     b.textContent = label;
@@ -209,6 +297,7 @@ async function selectNote(id: string, isNew = false): Promise<void> {
 
   const note = await sync.openNote(id);
   sync.active = id;
+  const date = diaryDate(id);
   const { doc, provider } = note;
   const body = doc.getText("body");
   const meta = doc.getMap("meta");
@@ -230,7 +319,7 @@ async function selectNote(id: string, isNew = false): Promise<void> {
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap]),
         drawSelection(),
         EditorView.lineWrapping,
-        placeholder("最初の行がタイトルになります"),
+        placeholder(date ? "この日の出来事を書きます" : "最初の行がタイトルになります"),
         yCollab(body, provider.awareness, { undoManager }),
       ],
     }),
@@ -241,7 +330,13 @@ async function selectNote(id: string, isNew = false): Promise<void> {
   const onLocalChange = (tr: Y.Transaction) => {
     if (!tr.local || tr.changed.has(meta as Y.AbstractType<any>)) return;
     clearTimeout(touchTimer);
-    touchTimer = window.setTimeout(() => meta.set("updatedAt", Date.now()), 500);
+    // A diary entry is opened without a creation time; writing creates it.
+    touchTimer = window.setTimeout(() => {
+      doc.transact(() => {
+        if (!meta.has("createdAt")) meta.set("createdAt", Date.now());
+        meta.set("updatedAt", Date.now());
+      });
+    }, 500);
   };
   const onAnyChange = () => {
     notes.set(id, summarize(id, doc));
@@ -266,13 +361,19 @@ async function selectNote(id: string, isNew = false): Promise<void> {
 
   function renderMeta() {
     const s = summarize(id, doc);
-    $("dates").textContent = `作成: ${formatDate(s.createdAt)}　更新: ${formatDate(s.updatedAt)}`;
+    if (date) {
+      const updated = meta.has("updatedAt") ? `　更新: ${formatDate(s.updatedAt)}` : "";
+      $("dates").textContent = `${formatDiaryDate(date)}の日記${updated}`;
+    } else {
+      $("dates").textContent = `作成: ${formatDate(s.createdAt)}　更新: ${formatDate(s.updatedAt)}`;
+    }
     $("trash-note").textContent = s.deleted ? "↺ 復元" : "🗑";
     $("trash-note").title = s.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ";
     renderTags(tags);
   }
 
   document.body.classList.add("has-note");
+  document.body.classList.toggle("is-diary", date !== null);
   renderMeta();
   onAnyChange();
   showEditor();
@@ -564,7 +665,12 @@ $("search").oninput = () => {
 };
 $("back").onclick = () => document.body.classList.remove("show-editor");
 
+document.querySelectorAll<HTMLButtonElement>("#mode-tabs button").forEach((b) => {
+  b.onclick = () => setMode(b.dataset.mode as Mode);
+});
+
 $("new-note").onclick = () => {
+  if (mode === "diary") return void openDiary(today());
   if (filterTag === TRASH) filterTag = null;
   const id = newId();
   void selectNote(id, true).then(() => {
@@ -707,7 +813,8 @@ $("export-note").onclick = () => {
   if (!current) return;
   const s = summarize(current.note.id, current.note.doc);
   const body = current.note.doc.getText("body").toString();
-  downloadBlob(new Blob([body], { type: "text/plain;charset=utf-8" }), safeFileName(s.title));
+  const date = diaryDate(current.note.id);
+  downloadBlob(new Blob([body], { type: "text/plain;charset=utf-8" }), date ? `${date}.txt` : safeFileName(s.title));
 };
 
 $("export-all").onclick = async () => {

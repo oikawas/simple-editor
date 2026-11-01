@@ -19,7 +19,8 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 - **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored
 - **Full-text search** — search note bodies and tags. Whitespace-separated terms must all match (AND), case is ignored, and Japanese matches by substring without word segmentation
 - **Edit history** — list past versions, compare them with the current text, and restore any of them. The content from before a restore stays in the history
-- **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note plus `notes.json` with tags and dates)
+- **Diary** — tabs switch between notes and the diary. Pick a date on the calendar to write that day's entry, one per day. Search covers notes and diary entries alike
+- **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note, diary entries as `diary/year/month/date.txt`, plus `notes.json` with tags and dates)
 - **Works offline** — notes are also stored in the device's IndexedDB and sync automatically on reconnect
 - **Per-device registration** — each device receives its own token when it registers. A lost device can be revoked on its own from any other device. Addresses with repeated failed sign-ins are locked out for a while
 

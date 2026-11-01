@@ -236,7 +236,7 @@ function renderMode(): void {
     b.classList.toggle("active", b.dataset.mode === mode);
   });
   const add = $("new-note");
-  add.textContent = mode === "diary" ? "今日" : "＋ 新規";
+  add.querySelector(".label")!.textContent = mode === "diary" ? "今日" : "新規";
   add.title = mode === "diary" ? "今日の日記" : "新規ノート";
   if (mode !== "diary") return;
   const written = new Set<string>();
@@ -367,8 +367,10 @@ async function selectNote(id: string, isNew = false): Promise<void> {
     } else {
       $("dates").textContent = `作成: ${formatDate(s.createdAt)}　更新: ${formatDate(s.updatedAt)}`;
     }
-    $("trash-note").textContent = s.deleted ? "↺ 復元" : "🗑";
-    $("trash-note").title = s.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ";
+    const trash = $("trash-note");
+    trash.classList.toggle("deleted", s.deleted);
+    trash.title = s.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ";
+    trash.setAttribute("aria-label", trash.title);
     renderTags(tags);
   }
 

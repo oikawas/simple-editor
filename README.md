@@ -112,6 +112,7 @@ sudo apt install build-essential libgtk-4-dev libadwaita-1-dev   # plus Rust (ru
 cargo build --release -p simple-editor-gtk
 install -Dm755 target/release/simple-editor-gtk ~/.local/bin/simple-editor-gtk
 install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/applications/io.github.oikawas.SimpleEditor.desktop
+install -Dm644 linux/data/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEditor.svg ~/.local/share/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEditor.svg
 ```
 
 - Install the server's root certificate into the OS certificate store (on Debian / Ubuntu):

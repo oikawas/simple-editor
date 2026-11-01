@@ -106,6 +106,7 @@ sudo apt install build-essential libgtk-4-dev libadwaita-1-dev   # Rust（rustup
 cargo build --release -p simple-editor-gtk
 install -Dm755 target/release/simple-editor-gtk ~/.local/bin/simple-editor-gtk
 install -Dm644 linux/data/io.github.oikawas.SimpleEditor.desktop ~/.local/share/applications/io.github.oikawas.SimpleEditor.desktop
+install -Dm644 linux/data/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEditor.svg ~/.local/share/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEditor.svg
 ```
 
 - サーバーのルート証明書は、OS の証明書ストアに入れます（Debian / Ubuntu の場合）

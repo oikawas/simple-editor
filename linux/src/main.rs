@@ -14,6 +14,8 @@ thread_local! {
 fn main() -> gtk::glib::ExitCode {
     let app = adw::Application::builder().application_id(config::APP_ID).build();
     app.connect_startup(|_| {
+        // Installed with the .desktop file (see the README).
+        gtk::Window::set_default_icon_name(config::APP_ID);
         let css = gtk::CssProvider::new();
         css.load_from_string(
             ".chip { padding: 2px 10px; min-height: 24px; border-radius: 999px; font-size: 0.9em; }",

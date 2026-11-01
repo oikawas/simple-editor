@@ -32,6 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- A new app icon for the web app (PWA), macOS, iOS, and Linux. The artwork and the script that renders it are in `design/icon/`
 - Refined the web app's design: line icons for buttons, a segmented control for the tabs, rounded list rows instead of divider lines, and round day cells in the calendar
 
 ## [0.1.0] - 2026-10-21

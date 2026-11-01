@@ -20,8 +20,8 @@ struct NoteListView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 Picker("表示", selection: $model.mode) {
-                    Text("メモ").tag(SidebarMode.notes)
                     Text("日記").tag(SidebarMode.diary)
+                    Text("メモ").tag(SidebarMode.notes)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Diary mode. Tabs above the list switch between notes and the diary. Pick a date on the calendar to write that day's entry (one per day); written days are marked. The same day written on several devices becomes one entry (its ID is `diary-YYYY-MM-DD`). Search covers notes and diary entries alike. Exporting all notes puts entries in `diary/year/month/date.txt`. In the web, Linux, macOS, and iOS apps
+- Diary mode. Tabs above the list switch between the diary and notes. Pick a date on the calendar to write that day's entry (one per day); written days are marked. The same day written on several devices becomes one entry (its ID is `diary-YYYY-MM-DD`). Search covers notes and diary entries alike. Exporting all notes puts entries in `diary/year/month/date.txt`. In the web, Linux, macOS, and iOS apps
 - Display settings: the web app sets the text's font size and line height, and the Linux app its font (typeface, weight, and size) and line height, per device in the settings
 - Per-device tokens. `AUTH_TOKEN` now registers devices, and each registered device gets its own token (the server stores only a hash). The settings list registered devices and can rename this device or revoke any device; a revoked device is disconnected at once
 - Limiting authentication attempts: an address with repeated failures is locked out for a while (`AUTH_MAX_FAILURES`, `AUTH_WINDOW_MINUTES`, `AUTH_LOCKOUT_MINUTES`)
@@ -29,6 +29,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Building the search index on startup for databases created before search existed
 - `SPEC.ja.md` describing the specification and design principles, this changelog, and English versions of both
 - English README (`README.md`); the Japanese version moved to `README.ja.md`
+
+### Changed
+
+- Refined the web app's design: line icons for buttons, a segmented control for the tabs, rounded list rows instead of divider lines, and round day cells in the calendar
 
 ## [0.1.0] - 2026-10-21
 

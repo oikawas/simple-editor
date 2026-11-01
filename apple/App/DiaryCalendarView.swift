@@ -84,8 +84,8 @@ struct DiaryCalendarView: View {
 
     private static func weekdayColor(_ weekday: Int) -> Color? {
         switch weekday {
-        case 0: .red
-        case 6: .blue
+        case 0: Color.red.opacity(0.8)
+        case 6: Color.blue.opacity(0.8)
         default: nil
         }
     }

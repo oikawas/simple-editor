@@ -128,7 +128,7 @@ There are two kinds of client:
 
 ### 3.13 Diary
 
-- The "メモ" (Notes) and "日記" (Diary) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
+- The "日記" (Diary) and "メモ" (Notes) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
 - The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today is outlined
 - Below the calendar, the shown month's entries are listed, newest day first (date and the start of the text)
 - The "今日" (Today) button in the diary tab opens today's entry. Dates are in the device's time zone

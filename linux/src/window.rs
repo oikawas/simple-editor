@@ -178,8 +178,8 @@ fn build_ui(app: &adw::Application) -> Ui {
     tabs.set_margin_start(8);
     tabs.set_margin_end(8);
     tabs.set_margin_top(6);
-    tabs.append(&notes_tab);
     tabs.append(&diary_tab);
+    tabs.append(&notes_tab);
     let search = gtk::SearchEntry::builder()
         .placeholder_text("検索（メモと日記）")
         .margin_start(8)

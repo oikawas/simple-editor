@@ -141,7 +141,7 @@ There are two kinds of client:
 
 - The "日記" (Diary) and "メモ" (Notes) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
 - The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today is outlined
-- Japanese national holidays (including substitute and citizens' holidays) are colored like Sundays, and dates show the holiday's name (for example 2026年11月3日（火・文化の日）). Holidays are computed on the device from the rules of the holiday law, so this works offline, for 1980 to 2099. In the Linux app, whose GTK calendar cannot color single days, only the name is shown
+- Japanese national holidays (including substitute and citizens' holidays) are colored like Sundays, and dates show the holiday's name (for example 2026年11月3日（火・文化の日）). Holidays are computed on the device from the rules of the holiday law, so this works offline, for 1980 to 2099
 - Below the calendar, the shown month's entries are listed, newest day first (date and the start of the text)
 - The "今日" (Today) button in the diary tab opens today's entry. Dates are in the device's time zone
 - An entry's ID follows from its date (5.1), so entries written for the same day on several devices while offline become one entry (merged as in 3.5)
@@ -220,6 +220,7 @@ There are two kinds of client:
 
 - Written in Rust and using the core directly (no UniFFI). The UI is GTK 4.14 and libadwaita 1.5
 - A split view (switching on narrow screens): search, tag filter, trash, and the list on the left; tags, creation and update times, and the text on the right. The header has history, export as text, and move to (or out of) the trash
+- The diary calendar is a grid of day buttons of its own (GtkCalendar cannot color single days). Sundays and holidays are red, Saturdays blue, today in the accent color, written days carry a dot, and hovering a day shows its date with any holiday name. In dark mode it uses the web app's lighter colors
 - The text is a GtkTextView. Each change passes the whole text to the core, which records only the part that changed. Changes from other devices are applied to the changed part only, and the cursor and selection stay in place (positions are recomputed from a character diff of the old and new text, so changes in several places, or an insertion right at the cursor, do not push them along)
 - The first line (the title) is shown larger
 - The settings register this device, rename it, list and revoke registered devices, and export everything. When this device is revoked, the stored token is deleted and registration is shown

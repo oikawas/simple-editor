@@ -35,6 +35,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The Linux app's diary calendar is now drawn by the app, with Sundays and holidays in red and Saturdays in blue (the web app's colors). It used GTK's calendar, which showed holidays only in the date line
 - A new app icon for the web app (PWA), macOS, iOS, and Linux. The artwork and the script that renders it are in `design/icon/`
 - Refined the web app's design: line icons for buttons, a segmented control for the tabs, rounded list rows instead of divider lines, and round day cells in the calendar
 

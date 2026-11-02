@@ -90,6 +90,15 @@
           <h3>登録済みの端末</h3>
           <div id="device-list"></div>
         </section>
+        <section id="import-section" hidden>
+          <h3>Simplenote から取り込み</h3>
+          <p class="hint">Simplenote で書き出した notes.zip（または中の notes.json）を選びます。ゴミ箱のノートは取り込みません。最終行が日付（例: 2024/01/02）のノートは、その日を作成日にします。取り込み済みのノートは飛ばすので、同じファイルをもう一度選んでも重複しません。</p>
+          <div class="row">
+            <button type="button" id="import-simplenote">ファイルを選んで取り込む</button>
+            <input id="import-file" type="file" accept=".zip,.json,application/zip,application/json" hidden />
+          </div>
+          <p id="import-message" class="message" hidden></p>
+        </section>
         <div class="row">
           <button type="button" id="export-all">すべて書き出し (.zip)</button>
           <span class="spacer"></span>

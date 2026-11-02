@@ -101,6 +101,17 @@ There are two kinds of client:
 - File names are the title with characters not allowed in file names replaced by `_`, cut to 80 characters. An empty title becomes `untitled`; duplicates get a number such as ` (2)`
 - Notes in the trash are left out (the API includes them with `?trash=1`)
 
+#### Import from Simplenote
+
+- In the web app's settings, "Simplenote から取り込み" (Import from Simplenote) takes a Simplenote export (`notes.zip`, or the `source/notes.json` inside it). The server does the import, and the imported notes sync to every device
+- Only the notes in `activeNotes` are imported. Notes in Simplenote's trash (`trashedNotes`) are left out
+- Bodies are imported as they are (line breaks become LF). Tags are imported too, with spaces replaced by `-` (the same rule as tag input)
+- **Creation time**: when the last non-empty line of the body is a date alone (`2024/01/02` or `2024/1/2`), that day becomes the creation date. The time of day is Simplenote's creation time if it falls on the same day, otherwise 0:00. The date is read in the time zone of the device doing the import. The date line stays in the body. Without a date line, Simplenote's creation time is used
+- **Update time**: Simplenote's last-modified time (or the creation time, if that is later)
+- A note's ID follows from its Simplenote ID (`sn-<Simplenote ID>`, or a hash of the ID when it has characters IDs cannot use). Notes whose ID already exists are skipped, so importing the same file again adds no duplicates. A note already imported is not overwritten, even if it was changed in Simplenote since
+- The imported content becomes each note's first version in the history
+- Files up to 100 MB are accepted
+
 ### 3.10 Device registration and authentication
 
 - The server's `AUTH_TOKEN` is the **registration token**, used only to register new devices. It cannot read or write notes
@@ -192,6 +203,7 @@ There are two kinds of client:
 - The list is fetched again with `GET /api/notes` when `__index` reports a change or the connection is re-established
 - A service worker (Workbox) caches the app shell so it starts offline. Updates apply automatically
 - At 720px wide or less, the list and the editor are shown one at a time. Supports iPhone safe areas and dark mode
+- Import from Simplenote (section 3.9) is only in the web app's settings, not in the native apps
 
 ### 4.4 Shared core for the native clients (Rust)
 
@@ -294,6 +306,7 @@ Everything except `/api/health` and device registration requires `Authorization:
 | `GET /api/notes/<id>/versions/<version id>` | One version: `{id, savedAt, body, tags}` |
 | `GET /api/notes/<id>.txt` | The body (`text/plain; charset=utf-8`, as an attachment) |
 | `GET /api/export.zip[?trash=1]` | Zip of all notes (section 3.9) |
+| `POST /api/import/simplenote[?tz=<time zone>]` | Imports a Simplenote export (zip or JSON) sent as the request body (section 3.9). `tz` is the IANA time zone date lines are read in (UTC by default). Returns `{total, imported, skipped}`. 400 if the file is not an export, 413 if it is over 100 MB |
 | WebSocket `/sync` | Yjs sync over the Hocuspocus protocol. The device token is sent in each document's authentication message. Refusal reasons are `unauthorized` and `rate-limited` |
 
 ## 8. Security

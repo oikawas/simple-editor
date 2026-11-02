@@ -60,8 +60,11 @@ function authHeaders(): HeadersInit {
 
 // Fetches from the API with this device's token. A refused token or a
 // lockout is reported once and stops further attempts.
-async function apiFetch(path: string): Promise<Response> {
-  const res = await fetch(`${settings.serverUrl}${path}`, { headers: authHeaders() });
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(`${settings.serverUrl}${path}`, {
+    ...init,
+    headers: { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) },
+  });
   if (res.status === 401) authFailed("unauthorized");
   if (res.status === 429) authFailed("rate-limited", Number(res.headers.get("retry-after") ?? 60));
   return res;
@@ -326,9 +329,10 @@ async function selectNote(id: string, isNew = false): Promise<void> {
   });
 
   // Record when the user last edited; remote and stored updates are not local.
+  // Empty local transactions (one runs as the editor attaches) are not edits.
   let touchTimer: number | undefined;
   const onLocalChange = (tr: Y.Transaction) => {
-    if (!tr.local || tr.changed.has(meta as Y.AbstractType<any>)) return;
+    if (!tr.local || tr.changed.size === 0 || tr.changed.has(meta as Y.AbstractType<any>)) return;
     clearTimeout(touchTimer);
     // A diary entry is opened without a creation time; writing creates it.
     touchTimer = window.setTimeout(() => {
@@ -539,6 +543,12 @@ function showSettingsMessage(text: string): void {
   el.hidden = !text;
 }
 
+function showImportMessage(text: string): void {
+  const el = $("import-message");
+  el.textContent = text;
+  el.hidden = !text;
+}
+
 function openSettings(message = ""): void {
   const dialog = $<HTMLDialogElement>("settings");
   field("serverUrl").value = settings.serverUrl;
@@ -548,6 +558,7 @@ function openSettings(message = ""): void {
   field("fontSize").value = String(display.fontSize);
   field("lineHeight").value = display.lineHeight.toFixed(1);
   showSettingsMessage(message);
+  showImportMessage("");
   updateSettingsForm();
   if (!dialog.open) dialog.showModal();
   if (settings.deviceToken) void renderDevices();
@@ -559,6 +570,7 @@ function updateSettingsForm(): void {
   field("registrationToken").required = register;
   $("devices-section").hidden = register;
   $("export-all").hidden = !settings.deviceToken;
+  $("import-section").hidden = register;
   $("settings-save").textContent = register ? "登録" : "保存";
 }
 
@@ -827,6 +839,41 @@ $("export-all").onclick = async () => {
     downloadBlob(await res.blob(), `notes-${stamp}.zip`);
   } catch (e) {
     alert(`書き出しに失敗しました (${e})。サーバーに接続できるか確認してください。`);
+  }
+};
+
+$("import-simplenote").onclick = () => $<HTMLInputElement>("import-file").click();
+
+$<HTMLInputElement>("import-file").onchange = async () => {
+  const input = $<HTMLInputElement>("import-file");
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const button = $<HTMLButtonElement>("import-simplenote");
+  button.disabled = true;
+  showImportMessage(`「${file.name}」を取り込んでいます…`);
+  try {
+    // The server reads last-line dates as days in this device's time zone.
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await apiFetch(`/api/import/simplenote?tz=${encodeURIComponent(tz)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: file,
+    });
+    if (res.status === 400) throw new Error("Simplenote の書き出しファイル（notes.zip か notes.json）ではありません。");
+    if (res.status === 413) throw new Error("ファイルが大きすぎます（上限 100 MB）。");
+    if (!res.ok) throw new Error(`サーバーでエラーが発生しました (${res.status})。`);
+    const r: { total: number; imported: number; skipped: number } = await res.json();
+    showImportMessage(
+      `${r.imported} 件を取り込みました。` + (r.skipped ? `${r.skipped} 件は取り込み済みのため飛ばしました。` : ""),
+    );
+    void refreshList();
+  } catch (e) {
+    showImportMessage(
+      `取り込めませんでした。${e instanceof TypeError ? "サーバーに接続できるか確認してください。" : (e as Error).message}`,
+    );
+  } finally {
+    button.disabled = false;
   }
 };
 

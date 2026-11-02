@@ -9,6 +9,7 @@ import type { Config } from "./config.js";
 import { Store, type Device } from "./db.js";
 import { buildZip, fileNameFor } from "./export.js";
 import { INDEX_DOC, NOTE_PREFIX, bodyOf, diaryDate, noteIdFromDocName, restoreMarkOf, summarize } from "./note.js";
+import { ImportFormatError, buildNoteDoc, noteIdFor, readSimplenoteExport, validTimeZone } from "./simplenote.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -25,6 +26,9 @@ const MIME: Record<string, string> = {
 // Set on WebSocket upgrades so the address survives into the auth hook, which
 // only sees request headers. Any value the client sends is overwritten.
 const REMOTE_ADDR_HEADER = "x-simple-editor-remote-addr";
+
+// Largest upload accepted for an import.
+const IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 
 type AuthFailure = { ok: false; status: 401 | 429; retryAfterMs: number };
 type AuthResult = { ok: true; device: Device } | AuthFailure;
@@ -116,20 +120,8 @@ export function createApp(config: Config) {
     async onStoreDocument({ document, documentName }) {
       const id = noteIdFromDocName(documentName);
       if (!id) return;
-      store.saveState(documentName, Y.encodeStateAsUpdate(document));
-      const now = Date.now();
-      const s = summarize(document);
-      const previous = store.getNote(id);
-      store.upsertNote({
-        id,
-        ...s,
-        createdAt: previous?.createdAt ?? s.createdAt ?? now,
-        updatedAt: s.updatedAt ?? now,
-      });
-      store.indexBody(id, bodyOf(document), s.tags);
-      store.recordVersion(id, bodyOf(document), s.tags, now, config.historyIntervalMs, restoreMarkOf(document));
-      // Tell every client watching the index that the list changed.
-      server.hocuspocus.documents.get(INDEX_DOC)?.broadcastStateless(JSON.stringify({ type: "changed", id }));
+      persist(id, document);
+      announceChange(id);
     },
 
     async onRequest({ request, response }) {
@@ -138,6 +130,49 @@ export function createApp(config: Config) {
       if (handled) throw null;
     },
   });
+
+  // Saves a note document and everything derived from it.
+  function persist(id: string, document: Y.Doc): void {
+    store.saveState(NOTE_PREFIX + id, Y.encodeStateAsUpdate(document));
+    const now = Date.now();
+    const s = summarize(document);
+    const previous = store.getNote(id);
+    store.upsertNote({
+      id,
+      ...s,
+      createdAt: previous?.createdAt ?? s.createdAt ?? now,
+      updatedAt: s.updatedAt ?? now,
+    });
+    store.indexBody(id, bodyOf(document), s.tags);
+    store.recordVersion(id, bodyOf(document), s.tags, now, config.historyIntervalMs, restoreMarkOf(document));
+  }
+
+  // Tells every client watching the index that the list changed.
+  function announceChange(id: string): void {
+    server.hocuspocus.documents.get(INDEX_DOC)?.broadcastStateless(JSON.stringify({ type: "changed", id }));
+  }
+
+  // Adds the notes of a Simplenote export. Notes imported before (same
+  // Simplenote id) are skipped, so an export can be imported again safely.
+  async function importSimplenote(data: Buffer, timeZone: string) {
+    const notes = await readSimplenoteExport(data);
+    const now = Date.now();
+    let imported = 0;
+    let skipped = 0;
+    for (const note of notes) {
+      const id = noteIdFor(note.id);
+      if (server.hocuspocus.documents.has(NOTE_PREFIX + id) || store.loadState(NOTE_PREFIX + id)) {
+        skipped++;
+        continue;
+      }
+      const doc = buildNoteDoc(note, timeZone, now);
+      persist(id, doc);
+      doc.destroy();
+      imported++;
+    }
+    if (imported > 0) announceChange("");
+    return { total: notes.length, imported, skipped };
+  }
 
   function currentDoc(id: string): Y.Doc | null {
     const name = NOTE_PREFIX + id;
@@ -200,6 +235,19 @@ export function createApp(config: Config) {
         disconnectDevice(revoke[1]);
         console.log(`auth: device ${revoke[1]} revoked by ${self.id}`);
         return send(res, 200, { ok: true });
+      }
+
+      if (p === "/api/import/simplenote" && req.method === "POST") {
+        const data = await readBody(req, IMPORT_MAX_BYTES);
+        if (!data) return send(res, 413, { error: "too large" });
+        try {
+          const result = await importSimplenote(data, validTimeZone(url.searchParams.get("tz")));
+          console.log(`import: ${result.imported} of ${result.total} Simplenote notes added by ${self.id}`);
+          return send(res, 200, result);
+        } catch (e) {
+          if (e instanceof ImportFormatError) return send(res, 400, { error: "not a Simplenote export" });
+          throw e;
+        }
       }
 
       if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
@@ -265,16 +313,23 @@ function deviceName(raw: unknown): string {
   return name || "端末";
 }
 
-async function readJson(req: IncomingMessage): Promise<any> {
+// The request body, or null when it is larger than `limit` bytes.
+async function readBody(req: IncomingMessage, limit: number): Promise<Buffer | null> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 16 * 1024) return null;
+    if (size > limit) return null;
     chunks.push(chunk);
   }
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req: IncomingMessage): Promise<any> {
+  const body = await readBody(req, 16 * 1024);
+  if (!body) return null;
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return JSON.parse(body.toString("utf8"));
   } catch {
     return null;
   }

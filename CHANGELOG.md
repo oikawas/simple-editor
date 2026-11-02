@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Import from Simplenote. Choosing a Simplenote export (`notes.zip` or `notes.json`) in the web app's settings imports the notes outside the trash with their bodies, tags, and dates. A note whose last line is a date (`2024/01/02`) gets that day as its creation date. Importing the same file again adds no duplicates
+- API: `POST /api/import/simplenote`
 - The diary calendar colors Japanese national holidays (including substitute and citizens' holidays) like Sundays and shows their names with the date. Holidays are computed on the device (1980 to 2099)
 - Diary mode. Tabs above the list switch between the diary and notes. Pick a date on the calendar to write that day's entry (one per day); written days are marked. The same day written on several devices becomes one entry (its ID is `diary-YYYY-MM-DD`). Search covers notes and diary entries alike. Exporting all notes puts entries in `diary/year/month/date.txt`. In the web, Linux, macOS, and iOS apps
 - Display settings: the web app sets the text's font size and line height, and the Linux app its font (typeface, weight, and size) and line height, per device in the settings
@@ -35,6 +37,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - A new app icon for the web app (PWA), macOS, iOS, and Linux. The artwork and the script that renders it are in `design/icon/`
 - Refined the web app's design: line icons for buttons, a segmented control for the tabs, rounded list rows instead of divider lines, and round day cells in the calendar
+
+### Fixed
+
+- In the web app, opening a note set its update time to the time it was opened
 
 ## [0.1.0] - 2026-10-21
 

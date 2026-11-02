@@ -2,6 +2,7 @@
 //! on the right.
 
 use crate::config::{self, Settings};
+use crate::calendar::DiaryCalendar;
 use crate::{history, settings_dialog};
 use adw::prelude::*;
 use gtk::{gio, glib};
@@ -75,10 +76,7 @@ pub struct Ui {
     new_button: gtk::Button,
     tag_scroll: gtk::ScrolledWindow,
     tag_bar: gtk::Box,
-    calendar: gtk::Calendar,
-    /// The (year, month) the list and marks were made for. A day selection
-    /// that comes with moving to another month is not taken as picking a day.
-    shown_month: Rc<Cell<(i32, i32)>>,
+    calendar: DiaryCalendar,
     list: gtk::ListBox,
     empty: adw::StatusPage,
     content_page: adw::NavigationPage,
@@ -103,9 +101,8 @@ pub struct App {
 const WEEKDAYS: [&str; 7] = ["日", "月", "火", "水", "木", "金", "土"];
 
 /// "2024年1月2日（火）" for "2024-01-02"; on a holiday, with its name:
-/// "2026年11月3日（火・文化の日）". (GTK's calendar cannot color holidays, so
-/// the name is where they show.)
-fn format_diary_date(date: &str) -> String {
+/// "2026年11月3日（火・文化の日）".
+pub fn format_diary_date(date: &str) -> String {
     match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
         Ok(d) => {
             use chrono::Datelike;
@@ -201,7 +198,12 @@ fn build_ui(app: &adw::Application) -> Ui {
         .margin_top(6)
         .margin_bottom(6)
         .build();
-    let calendar = gtk::Calendar::builder().margin_start(8).margin_end(8).margin_top(6).margin_bottom(6).build();
+    let calendar = DiaryCalendar::new(&today());
+    let calendar_widget = calendar.widget();
+    calendar_widget.set_margin_start(12);
+    calendar_widget.set_margin_end(12);
+    calendar_widget.set_margin_top(6);
+    calendar_widget.set_margin_bottom(6);
     let list = gtk::ListBox::new();
     list.add_css_class("navigation-sidebar");
     let list_scroll = gtk::ScrolledWindow::builder().child(&list).vexpand(true).build();
@@ -210,7 +212,7 @@ fn build_ui(app: &adw::Application) -> Ui {
     side_box.append(&tabs);
     side_box.append(&search);
     side_box.append(&tag_scroll);
-    side_box.append(&calendar);
+    side_box.append(calendar.widget());
     side_box.append(&list_scroll);
     let side_toolbar = adw::ToolbarView::new();
     side_toolbar.add_top_bar(&side_header);
@@ -304,7 +306,6 @@ fn build_ui(app: &adw::Application) -> Ui {
     narrow.add_setter(&split, "collapsed", Some(&true.to_value()));
     window.add_breakpoint(narrow);
 
-    let shown_month = (calendar.year(), calendar.month());
     Ui {
         window,
         toasts,
@@ -318,7 +319,6 @@ fn build_ui(app: &adw::Application) -> Ui {
         tag_scroll,
         tag_bar,
         calendar,
-        shown_month: Rc::new(Cell::new(shown_month)),
         list,
         empty,
         content_page,
@@ -383,28 +383,17 @@ fn connect_signals(app: &Rc<App>) {
         }
     });
 
-    // Moving to another month shows its entries; picking a day in the shown
-    // month opens that day's entry. Moving can also select a day, so a
-    // selection is a pick only when the month stayed the same.
+    // Moving to another month shows its entries; picking a day opens that day's entry.
     let weak = Rc::downgrade(app);
-    let moved = move |_: &gtk::Calendar| {
+    app.ui.calendar.connect_month_changed(move |_| {
         if let Some(app) = weak.upgrade() {
-            app.calendar_month_changed();
+            app.render_list();
         }
-    };
-    let calendar = &app.ui.calendar;
-    calendar.connect_next_month(moved.clone());
-    calendar.connect_prev_month(moved.clone());
-    calendar.connect_next_year(moved.clone());
-    calendar.connect_prev_year(moved);
+    });
     let weak = Rc::downgrade(app);
-    app.ui.calendar.connect_day_selected(move |calendar| {
-        let Some(app) = weak.upgrade() else { return };
-        if app.calendar_month_changed() {
-            return;
-        }
-        if let Ok(text) = calendar.date().format("%Y-%m-%d") {
-            app.open_diary(&text);
+    app.ui.calendar.connect_day_picked(move |date| {
+        if let Some(app) = weak.upgrade() {
+            app.open_diary(date);
         }
     });
 
@@ -715,7 +704,7 @@ impl App {
         // Without a search: the notes (or the trash, or a tag), or the shown
         // month's diary entries. A search covers notes and diary entries alike.
         if terms.is_empty() && st.mode == Mode::Diary {
-            let month = format!("{:04}-{:02}-", self.ui.calendar.year(), self.ui.calendar.month() + 1);
+            let month = self.ui.calendar.month_prefix();
             let mut entries: Vec<(NoteSummary, Option<String>)> = st
                 .notes
                 .iter()
@@ -841,7 +830,7 @@ impl App {
     /// the calendar's month.
     fn render_mode(&self) {
         // Read the state first: setting the tabs runs their handlers.
-        let month = format!("{:04}-{:02}-", self.ui.calendar.year(), self.ui.calendar.month() + 1);
+        let month = self.ui.calendar.month_prefix();
         let (diary, written): (bool, Vec<u32>) = {
             let st = self.state.borrow();
             let days = st
@@ -856,7 +845,7 @@ impl App {
         self.ui.diary_tab.set_active(diary);
         self.ui.status_title.set_title(if diary { "日記" } else { "メモ" });
         self.ui.tag_scroll.set_visible(!diary);
-        self.ui.calendar.set_visible(diary);
+        self.ui.calendar.widget().set_visible(diary);
         self.ui.new_button.set_icon_name(if diary { "x-office-calendar-symbolic" } else { "list-add-symbolic" });
         self.ui.new_button.set_tooltip_text(Some(if diary { "今日の日記" } else { "新規ノート" }));
         self.ui.empty.set_title(if diary {
@@ -867,36 +856,13 @@ impl App {
         if !diary {
             return;
         }
-        self.ui.calendar.clear_marks();
-        for day in written {
-            self.ui.calendar.mark_day(day);
-        }
-    }
-
-    /// Re-renders the list when the calendar shows another month; true if it did.
-    fn calendar_month_changed(self: &Rc<Self>) -> bool {
-        let month = (self.ui.calendar.year(), self.ui.calendar.month());
-        if self.ui.shown_month.replace(month) == month {
-            return false;
-        }
-        self.render_list();
-        true
+        self.ui.calendar.set_written(written);
     }
 
     /// Opens the diary entry for a date ("YYYY-MM-DD"), switching to the diary tab.
     fn open_diary(self: &Rc<Self>, date: &str) {
         let Some(id) = diary_note_id(date.to_owned()) else { return };
-        if let Ok(d) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
-            use chrono::Datelike;
-            let shown = self.ui.calendar.date();
-            if (shown.year(), shown.month(), shown.day_of_month()) != (d.year(), d.month() as i32, d.day() as i32) {
-                if let Ok(dt) = glib::DateTime::from_local(d.year(), d.month() as i32, d.day() as i32, 0, 0, 0.0) {
-                    // The month is recorded first, so the selection is not taken as a move.
-                    self.ui.shown_month.set((d.year(), d.month0() as i32));
-                    self.ui.calendar.select_day(&dt);
-                }
-            }
-        }
+        self.ui.calendar.select(date);
         self.set_mode(Mode::Diary);
         self.select_note(&id);
         self.render_list();

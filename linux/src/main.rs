@@ -1,3 +1,4 @@
+mod calendar;
 mod config;
 mod history;
 mod settings_dialog;
@@ -16,15 +17,26 @@ fn main() -> gtk::glib::ExitCode {
     app.connect_startup(|_| {
         // Installed with the .desktop file (see the README).
         gtk::Window::set_default_icon_name(config::APP_ID);
+        let display = gtk::gdk::Display::default().expect("display");
         let css = gtk::CssProvider::new();
-        css.load_from_string(
-            ".chip { padding: 2px 10px; min-height: 24px; border-radius: 999px; font-size: 0.9em; }",
-        );
-        gtk::style_context_add_provider_for_display(
-            &gtk::gdk::Display::default().expect("display"),
-            &css,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+        css.load_from_string(&format!(
+            ".chip {{ padding: 2px 10px; min-height: 24px; border-radius: 999px; font-size: 0.9em; }}\n{}",
+            calendar::CSS
+        ));
+        gtk::style_context_add_provider_for_display(&display, &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        // Lighter weekend and holiday colors on a dark background, swapped with the theme.
+        let dark = gtk::CssProvider::new();
+        dark.load_from_string(calendar::CSS_DARK);
+        let apply = move |manager: &adw::StyleManager| {
+            if manager.is_dark() {
+                gtk::style_context_add_provider_for_display(&display, &dark, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+            } else {
+                gtk::style_context_remove_provider_for_display(&display, &dark);
+            }
+        };
+        let manager = adw::StyleManager::default();
+        apply(&manager);
+        manager.connect_dark_notify(apply);
     });
     app.connect_activate(|app| {
         if let Some(existing) = APP.with(|a| a.borrow().clone()) {

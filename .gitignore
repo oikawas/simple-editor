@@ -14,3 +14,6 @@ apple/SimpleEditorCore/.build/
 apple/*.xcodeproj/
 # Xcode's per-user state for Swift packages
 .swiftpm/
+# Local material that is not shared through git (handoff notes and the like)
+/no-git-sync/
+CLAUDE.local.md

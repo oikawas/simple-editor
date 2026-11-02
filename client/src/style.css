@@ -150,6 +150,7 @@ body.mode-diary #tag-filter { display: none; }
 }
 .cal-day.sun, .cal-weekday.sun { color: var(--sun); }
 .cal-day.sat, .cal-weekday.sat { color: var(--sat); }
+.cal-day.holiday { color: var(--sun); }
 .cal-day.today { color: var(--accent); font-weight: 700; }
 .cal-day.selected { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .cal-day.written::after {

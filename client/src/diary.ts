@@ -1,3 +1,5 @@
+import { japaneseHoliday } from "./holidays";
+
 // Diary entries: the note "diary-YYYY-MM-DD" holds what was written that day
 // (see server/src/note.ts). Dates are the device's local dates.
 
@@ -27,10 +29,12 @@ function parse(date: string): Date {
   return new Date(y, m - 1, d);
 }
 
-// "2024年1月2日（火）"
+// "2024年1月2日（火）", or "2026年11月3日（火・文化の日）" on a holiday.
 export function formatDiaryDate(date: string): string {
   const d = parse(date);
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`;
+  const holiday = japaneseHoliday(date);
+  const day = WEEKDAYS[d.getDay()] + (holiday ? `・${holiday}` : "");
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${day}）`;
 }
 
 export interface Month {
@@ -60,7 +64,8 @@ export interface CalendarOptions {
   onMonth: (month: Month) => void;
 }
 
-// A month grid starting on Sunday. Days with an entry carry a dot.
+// A month grid starting on Sunday. Days with an entry carry a dot; holidays
+// are colored like Sundays.
 export function renderCalendar(box: HTMLElement, o: CalendarOptions): void {
   const head = document.createElement("div");
   head.className = "cal-head";
@@ -93,6 +98,7 @@ export function renderCalendar(box: HTMLElement, o: CalendarOptions): void {
     cell.className = [
       "cal-day",
       weekday === 0 ? "sun" : weekday === 6 ? "sat" : "",
+      japaneseHoliday(date) ? "holiday" : "",
       date === todayDate ? "today" : "",
       date === o.selected ? "selected" : "",
       o.written.has(date) ? "written" : "",

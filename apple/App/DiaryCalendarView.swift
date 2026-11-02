@@ -54,7 +54,8 @@ struct DiaryCalendarView: View {
                         dayCell(
                             day: day,
                             date: date,
-                            weekday: (month.firstWeekday + day - 1) % 7,
+                            // Holidays are colored like Sundays.
+                            weekday: Diary.holiday(date) != nil ? 0 : (month.firstWeekday + day - 1) % 7,
                             isSelected: date == selected,
                             isToday: date == today,
                             isWritten: written.contains(day)

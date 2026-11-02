@@ -72,11 +72,18 @@ public enum Diary {
         return calendar.component(.weekday, from: d) - 1
     }
 
-    /// "2024年1月2日（火）"
+    /// "2024年1月2日（火）", or "2026年11月3日（火・文化の日）" on a holiday.
     public static func format(_ date: String) -> String {
         let parts = date.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return date }
-        return "\(parts[0])年\(parts[1])月\(parts[2])日（\(weekdays[weekday(of: date)])）"
+        var day = weekdays[weekday(of: date)]
+        if let name = holiday(date) { day += "・\(name)" }
+        return "\(parts[0])年\(parts[1])月\(parts[2])日（\(day)）"
+    }
+
+    /// The name of the Japanese holiday on a date, or nil.
+    public static func holiday(_ date: String) -> String? {
+        japaneseHoliday(date: date)
     }
 
     /// The date of a diary entry's id, or nil for an ordinary note.

@@ -5,6 +5,9 @@ final class DiaryTests: XCTestCase {
     func testDates() {
         XCTAssertEqual(Diary.format("2024-01-02"), "2024年1月2日（火）")
         XCTAssertEqual(Diary.format("2026-10-31"), "2026年10月31日（土）")
+        XCTAssertEqual(Diary.format("2026-11-03"), "2026年11月3日（火・文化の日）")
+        XCTAssertEqual(Diary.holiday("2026-05-06"), "振替休日")
+        XCTAssertNil(Diary.holiday("2026-11-04"))
         XCTAssertEqual(Diary.date(ofNote: "diary-2024-02-29"), "2024-02-29")
         XCTAssertNil(Diary.date(ofNote: "diary-2023-02-29"))
         XCTAssertNil(Diary.date(ofNote: "0b5c8f3e-1111-4222-8333-944445555666"))

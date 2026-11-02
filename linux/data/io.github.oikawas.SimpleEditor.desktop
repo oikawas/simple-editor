@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Simple Editor
+Comment=Plain-text notes synced with your home server
+Comment[ja]=自宅サーバーと同期するプレーンテキストのメモ
+Exec=simple-editor-gtk
+Icon=io.github.oikawas.SimpleEditor
+Terminal=false
+Categories=Office;Utility;TextEditor;
+StartupNotify=true

@@ -15,13 +15,16 @@
     <div id="app">
       <aside id="sidebar">
         <header class="bar">
-          <button id="new-note" class="primary" title="新規ノート">＋ 新規</button>
           <span id="status" class="status" title="同期状態"></span>
-          <button id="open-settings" title="設定">⚙︎</button>
+          <button id="new-note" class="icon-button" title="新規ノート">
+            <span class="for-notes"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="for-diary"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>
+            <span class="label">新規</span>
+          </button>
+          <button id="open-settings" class="icon-button" title="設定" aria-label="設定"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
         </header>
-        <nav id="mode-tabs" class="segmented">
-          <button data-mode="notes">メモ</button>
+        <nav id="mode-tabs" class="tabs">
           <button data-mode="diary">日記</button>
+          <button data-mode="notes">メモ</button>
         </nav>
         <input id="search" type="search" placeholder="検索（メモと日記）" autocomplete="off" />
         <nav id="tag-filter"></nav>
@@ -30,11 +33,13 @@
       </aside>
       <main id="editor-pane">
         <header class="bar">
-          <button id="back" class="mobile-only" title="一覧へ">‹ 一覧</button>
+          <button id="back" class="icon-button mobile-only" title="一覧へ"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 18-6-6 6-6"/></svg><span class="label">一覧</span></button>
           <div id="tags" class="tags"></div>
-          <button id="history-note" title="編集履歴">🕘<span class="label"> 履歴</span></button>
-          <button id="export-note" title="テキストとして書き出し">⇩ .txt</button>
-          <button id="trash-note" title="ゴミ箱へ">🗑</button>
+          <button id="history-note" class="icon-button" title="編集履歴" aria-label="編集履歴"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></button>
+          <button id="export-note" class="icon-button" title="テキストとして書き出し" aria-label="テキストとして書き出し"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></svg></button>
+          <button id="trash-note" class="icon-button" title="ゴミ箱へ" aria-label="ゴミ箱へ">
+            <span class="when-active"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/></svg></span><span class="when-deleted"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 13.5 4.5 9 9 4.5"/><path d="M4.5 9H14a5.5 5.5 0 0 1 0 11h-3"/></svg></span>
+          </button>
         </header>
         <div id="dates" class="dates"></div>
         <div id="editor"></div>

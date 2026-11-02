@@ -128,8 +128,9 @@ There are two kinds of client:
 
 ### 3.13 Diary
 
-- The "メモ" (Notes) and "日記" (Diary) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
+- The "日記" (Diary) and "メモ" (Notes) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
 - The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today is outlined
+- Japanese national holidays (including substitute and citizens' holidays) are colored like Sundays, and dates show the holiday's name (for example 2026年11月3日（火・文化の日）). Holidays are computed on the device from the rules of the holiday law, so this works offline, for 1980 to 2099. In the Linux app, whose GTK calendar cannot color single days, only the name is shown
 - Below the calendar, the shown month's entries are listed, newest day first (date and the start of the text)
 - The "今日" (Today) button in the diary tab opens today's entry. Dates are in the device's time zone
 - An entry's ID follows from its date (5.1), so entries written for the same day on several devices while offline become one entry (merged as in 3.5)

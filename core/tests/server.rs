@@ -4,7 +4,7 @@
 use simple_editor_core::client::{register_device, Client, ClientConfig, ClientListener};
 use simple_editor_core::error::CoreError;
 use simple_editor_core::sync::SyncStatus;
-use std::net::TcpListener;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -24,10 +24,12 @@ struct Server {
 }
 
 impl Server {
+    /// Starts a server on a port the system chooses. Picking a free port here
+    /// and passing it on would race with the other tests running alongside:
+    /// two of them could get the same port and end up sharing one server.
     fn start() -> Server {
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let mut server = Server { child: None, port, data: tempfile::tempdir().unwrap() };
-        server.restart();
+        let mut server = Server { child: None, port: 0, data: tempfile::tempdir().unwrap() };
+        server.port = server.spawn(0).expect("server did not start");
         server
     }
 
@@ -35,23 +37,41 @@ impl Server {
         format!("http://127.0.0.1:{}", self.port)
     }
 
+    /// Starts again on the same port, so clients reconnect to it. Another
+    /// process may hold the port for a moment; then it tries again.
     fn restart(&mut self) {
-        let child = Command::new("node")
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.spawn(self.port).is_none() {
+            assert!(Instant::now() < deadline, "server did not restart on port {}", self.port);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// Runs the server and waits until it reports the port it listens on;
+    /// None if it exits first (the port is taken).
+    fn spawn(&mut self, port: u16) -> Option<u16> {
+        let mut child = Command::new("node")
             .arg(repo_root().join("server/dist/index.js"))
             .env("AUTH_TOKEN", REGISTRATION_TOKEN)
             .env("DATA_DIR", self.data.path())
-            .env("PORT", self.port.to_string())
+            .env("PORT", port.to_string())
             .env("HISTORY_INTERVAL_MINUTES", "0")
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .expect("node");
+        let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+        let listening = lines.by_ref().map_while(Result::ok).find_map(|line| {
+            line.strip_prefix("simple-editor listening on :")?.split(' ').next()?.parse::<u16>().ok()
+        });
+        let Some(port) = listening else {
+            let _ = child.wait();
+            return None;
+        };
+        // Keep reading what it logs, so a full pipe never blocks it.
+        std::thread::spawn(move || lines.for_each(drop));
         self.child = Some(child);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while std::net::TcpStream::connect(("127.0.0.1", self.port)).is_err() {
-            assert!(Instant::now() < deadline, "server did not start");
-            std::thread::sleep(Duration::from_millis(50));
-        }
+        Some(port)
     }
 
     fn stop(&mut self) {

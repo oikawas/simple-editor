@@ -6,6 +6,15 @@ import SwiftUI
 struct DiaryCalendarView: View {
     @Environment(AppModel.self) private var model
 
+    /// One grid cell. The grid needs ids unique across all its cells: with
+    /// plain numbers, the weekday labels (0-6) and days 1-6 collide, and the
+    /// grid drops those days.
+    private enum Cell: Hashable {
+        case weekday(Int)
+        case blank(Int)
+        case day(Int)
+    }
+
     var body: some View {
         let month = model.shownMonth
         let written = model.writtenDays
@@ -27,27 +36,32 @@ struct DiaryCalendarView: View {
                 .help("次の月")
             }
             .buttonStyle(.borderless)
+            let cells = (0..<7).map(Cell.weekday)
+                + (0..<month.firstWeekday).map(Cell.blank)
+                + (1...month.numberOfDays).map(Cell.day)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
-                ForEach(0..<7, id: \.self) { i in
-                    Text(Diary.weekdays[i])
-                        .font(.caption2)
-                        .foregroundStyle(Self.weekdayColor(i) ?? .secondary)
-                }
-                // Blank cells before the 1st.
-                ForEach(0..<month.firstWeekday, id: \.self) { _ in
-                    Color.clear.frame(height: 1)
-                }
-                ForEach(1...month.numberOfDays, id: \.self) { day in
-                    let date = month.date(day: day)
-                    dayCell(
-                        day: day,
-                        date: date,
-                        weekday: (month.firstWeekday + day - 1) % 7,
-                        isSelected: date == selected,
-                        isToday: date == today,
-                        isWritten: written.contains(day)
-                    ) {
-                        model.openDiary(date: date)
+                ForEach(cells, id: \.self) { cell in
+                    switch cell {
+                    case .weekday(let i):
+                        Text(Diary.weekdays[i])
+                            .font(.caption2)
+                            .foregroundStyle(Self.weekdayColor(i) ?? .secondary)
+                    case .blank:
+                        // Before the 1st.
+                        Color.clear.frame(height: 1)
+                    case .day(let day):
+                        let date = month.date(day: day)
+                        dayCell(
+                            day: day,
+                            date: date,
+                            // Holidays are colored like Sundays.
+                            weekday: Diary.holiday(date) != nil ? 0 : (month.firstWeekday + day - 1) % 7,
+                            isSelected: date == selected,
+                            isToday: date == today,
+                            isWritten: written.contains(day)
+                        ) {
+                            model.openDiary(date: date)
+                        }
                     }
                 }
             }
@@ -84,8 +98,8 @@ struct DiaryCalendarView: View {
 
     private static func weekdayColor(_ weekday: Int) -> Color? {
         switch weekday {
-        case 0: .red
-        case 6: .blue
+        case 0: Color.red.opacity(0.8)
+        case 6: Color.blue.opacity(0.8)
         default: nil
         }
     }

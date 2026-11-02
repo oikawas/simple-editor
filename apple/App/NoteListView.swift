@@ -20,13 +20,13 @@ struct NoteListView: View {
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 Picker("表示", selection: $model.mode) {
-                    Text("メモ").tag(SidebarMode.notes)
                     Text("日記").tag(SidebarMode.diary)
+                    Text("メモ").tag(SidebarMode.notes)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .padding(.horizontal)
-                .padding(.top, 6)
+                .padding(.top, 4)
                 if model.mode == .notes {
                     TagFilterBar()
                 } else {
@@ -46,6 +46,11 @@ struct NoteListView: View {
             }
         }
         .navigationTitle(model.mode == .diary ? "日記" : "メモ")
+        #if os(iOS)
+        // A large title would leave a tall empty band above the tabs; the
+        // tabs already say which list this is.
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if model.mode == .diary {

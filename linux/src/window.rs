@@ -8,6 +8,7 @@ use gtk::{gio, glib};
 use simple_editor_core::client::{Client, ClientConfig, ClientListener, Note};
 use simple_editor_core::diff::remap_char_offsets;
 use simple_editor_core::error::CoreError;
+use simple_editor_core::holiday::japanese_holiday;
 use simple_editor_core::note::{diary_date, diary_note_id, NoteSummary};
 use simple_editor_core::sync::SyncStatus;
 use std::cell::{Cell, RefCell};
@@ -101,12 +102,17 @@ pub struct App {
 
 const WEEKDAYS: [&str; 7] = ["日", "月", "火", "水", "木", "金", "土"];
 
-/// "2024年1月2日（火）" for "2024-01-02".
+/// "2024年1月2日（火）" for "2024-01-02"; on a holiday, with its name:
+/// "2026年11月3日（火・文化の日）". (GTK's calendar cannot color holidays, so
+/// the name is where they show.)
 fn format_diary_date(date: &str) -> String {
     match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
         Ok(d) => {
             use chrono::Datelike;
-            let weekday = WEEKDAYS[d.weekday().num_days_from_sunday() as usize];
+            let mut weekday = WEEKDAYS[d.weekday().num_days_from_sunday() as usize].to_owned();
+            if let Some(holiday) = japanese_holiday(date.to_owned()) {
+                weekday = format!("{weekday}・{holiday}");
+            }
             format!("{}年{}月{}日（{weekday}）", d.year(), d.month(), d.day())
         }
         Err(_) => date.to_owned(),
@@ -178,8 +184,8 @@ fn build_ui(app: &adw::Application) -> Ui {
     tabs.set_margin_start(8);
     tabs.set_margin_end(8);
     tabs.set_margin_top(6);
-    tabs.append(&notes_tab);
     tabs.append(&diary_tab);
+    tabs.append(&notes_tab);
     let search = gtk::SearchEntry::builder()
         .placeholder_text("検索（メモと日記）")
         .margin_start(8)

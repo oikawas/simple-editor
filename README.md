@@ -8,7 +8,7 @@ English | [日本語](README.ja.md)
 
 Simple Editor is a plain-text notes app you host yourself, written as a replacement for Simplenote.
 
-It runs on a home server with Docker Compose, stores everything in a single SQLite file, and is reached from devices on the same LAN over HTTPS, using certificates from a local certificate authority, so no domain or internet service is needed. The client is one web app that you install as a PWA on macOS, iPhone, and Android. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects. Full-text search and an edit history you can restore from are built in.
+It runs on a home server with Docker Compose, stores everything in a single SQLite file, and is reached from devices on the same LAN over HTTPS, using certificates from a local certificate authority, so no domain or internet service is needed. The client is a web app that you install as a PWA on macOS, iPhone, and Android, and there are native apps for Linux, macOS, and iOS. Notes sync live between devices through [Yjs](https://yjs.dev/), a CRDT, so you can edit the same note on several devices at once, or offline, and no change is lost. Each device also keeps its own copy of the notes and sends offline edits when it reconnects. Full-text search and an edit history you can restore from are built in.
 
 See [SPEC.md](SPEC.md) for the full specification and design principles, and [CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
@@ -16,10 +16,12 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 
 - **Tags** — add several tags to a note and filter the list by tag
 - **Safe concurrent editing from several devices** — edits sync through Yjs. Whether you edit the same note on several devices at once or while offline, changes are merged without losing any of them
-- **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored
+- **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored with a later one (it can be moved earlier, for example to the date imported text carries)
 - **Full-text search** — search note bodies and tags. Whitespace-separated terms must all match (AND), case is ignored, and Japanese matches by substring without word segmentation
 - **Edit history** — list past versions, compare them with the current text, and restore any of them. The content from before a restore stays in the history
 - **Diary** — tabs switch between notes and the diary. Pick a date on the calendar to write that day's entry, one per day. Search covers notes and diary entries alike
+- **Import from Simplenote** — import the `notes.zip` Simplenote exports from the web app's settings. Bodies, tags, and dates carry over, and a note whose last line is a date (for example `2024/01/02`) gets that day as its creation date. Importing the same file again adds no duplicates
+- **Import from a pomera (iOS)** — read the QR codes a pomera shows with the iPhone's camera to import the text, including long texts split over several codes. On the Notes tab it becomes a new note; on the Diary tab, the entry of the date on its last line
 - **Plain-text export** — export one note as `.txt`, or all notes as a `.zip` (one `.txt` per note, diary entries as `diary/year/month/date.txt`, plus `notes.json` with tags and dates)
 - **Works offline** — notes are also stored in the device's IndexedDB and sync automatically on reconnect
 - **Per-device registration** — each device receives its own token when it registers. A lost device can be revoked on its own from any other device. Addresses with repeated failed sign-ins are locked out for a while
@@ -35,7 +37,7 @@ apple/    The macOS and iOS app (SwiftUI) and the core's Swift package
 Caddyfile HTTPS on the LAN (local CA), used by Caddy in compose
 ```
 
-The client is a single PWA. Install it on each platform as follows.
+The web client is a PWA. Install it on each platform as follows. There are also native apps for Linux, macOS, and iOS (see below).
 
 | Platform | How to install |
 | --- | --- |
@@ -165,6 +167,8 @@ Choose the scheme **SimpleEditor-macOS** and the destination **My Mac** at the t
 ### Other notes
 
 - The device token is kept in the Keychain. Notes are also kept in the app's data, so they can be read and edited offline
+- While the server cannot be reached, the app reconnects every 15 minutes (the first try after a drop comes after 1 second). It reconnects at once when the network comes back, when the app returns to the foreground, when you pull the list to refresh, or when you tap the offline status
+- "ポメラから取り込み" (Import from pomera) in the iOS app asks for camera access the first time. If you declined, turn on Settings → Simple Editor → Camera
 - The UI-independent part (`SimpleEditorModel` in `apple/SimpleEditorCore`) can be tested with `swift test` on a Mac or on Linux. With `SIMPLE_EDITOR_TEST_SERVER` (server URL) and `SIMPLE_EDITOR_TEST_TOKEN` (registration token) set, it drives two devices against a real server. On Linux, run `./apple/generate-bindings.sh` first
 
 ## Settings (`.env`)
@@ -201,6 +205,7 @@ When running the app directly without compose, `PORT` (default `8080`), `DATA_DI
 | `GET /api/notes/:id/versions/:versionId` | One version's body and tags |
 | `GET /api/notes/:id.txt` | One note as text |
 | `GET /api/export.zip` | All notes as a zip (`?trash=1` includes the trash) |
+| `POST /api/import/simplenote` | Imports a Simplenote export (zip or JSON); `?tz=` gives the time zone dates are read in |
 | `WS /sync` | Yjs sync (Hocuspocus protocol) |
 
 ## Development
@@ -220,7 +225,6 @@ See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 - An Android app
 - Offline full-text search (offline, only the open note is searched by its full body; other notes by title, beginning, and tags)
 - Emptying the trash, a retention period for history
-- Importing from Simplenote
 
 ## License
 

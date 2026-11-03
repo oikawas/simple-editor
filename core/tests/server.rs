@@ -275,3 +275,26 @@ async fn a_revoked_device_stops_syncing() {
     until("online again", || b.events.last_status() == Some(SyncStatus::Online)).await;
     assert!(b.client.devices().await.is_ok());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn retries_start_quickly_again_after_a_working_connection() {
+    let mut server = Server::start();
+    let a = device(&server, "a").await;
+    let offline_count =
+        || a.events.statuses.lock().unwrap().iter().filter(|s| **s == SyncStatus::Offline).count();
+
+    // A long outage: attempts failing in a row wait longer and longer (1, 2, 4 s).
+    server.stop();
+    until("several failed attempts", || offline_count() >= 4).await;
+    server.restart();
+    until("online again", || a.events.last_status() == Some(SyncStatus::Online)).await;
+
+    // That connection worked, so after the next drop the first retry comes
+    // after 1 s again, not after the 8 s or more the outage had reached.
+    server.stop();
+    until("offline", || a.events.last_status() == Some(SyncStatus::Offline)).await;
+    let dropped_at = Instant::now();
+    let seen = a.events.statuses.lock().unwrap().len();
+    until("retrying", || a.events.statuses.lock().unwrap()[seen..].contains(&SyncStatus::Connecting)).await;
+    assert!(dropped_at.elapsed() < Duration::from_secs(4), "retried after {:?}", dropped_at.elapsed());
+}

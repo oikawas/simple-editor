@@ -129,6 +129,18 @@ public final class AppModel {
         }
     }
 
+    /// Connects again at once, e.g. when the network comes back or the app
+    /// returns to the foreground, instead of waiting for the next retry.
+    /// Skipped when the server refused this device or asked it to wait:
+    /// trying again would only count as another failure.
+    public func reconnectNow() {
+        guard let client else { return }
+        switch status {
+        case .unauthorized, .rateLimited: return
+        default: client.reconnect(deviceToken: nil)
+        }
+    }
+
     private func disconnect() {
         closeCurrent()
         eventTask?.cancel()

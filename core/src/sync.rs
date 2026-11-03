@@ -117,7 +117,7 @@ pub fn start(
 ) -> SyncHandle {
     let (tx, rx) = mpsc::unbounded_channel();
     let handle = SyncHandle { tx };
-    let engine = Engine { config, store, events, rx, entries: HashMap::new() };
+    let engine = Engine { config, store, events, rx, entries: HashMap::new(), went_online: false };
     runtime.spawn(engine.run());
     handle
 }
@@ -128,6 +128,30 @@ struct Engine {
     events: Arc<dyn SyncEvents>,
     rx: mpsc::UnboundedReceiver<Command>,
     entries: HashMap<String, Entry>,
+    /// The current (or last) connection reached the server.
+    went_online: bool,
+}
+
+/// Waits between reconnection attempts: 1 s, doubling up to MAX_BACKOFF.
+struct Backoff(Duration);
+
+impl Backoff {
+    const FIRST: Duration = Duration::from_secs(1);
+
+    fn new() -> Self {
+        Backoff(Self::FIRST)
+    }
+
+    fn reset(&mut self) {
+        self.0 = Self::FIRST;
+    }
+
+    /// The wait before the next attempt; later ones wait longer.
+    fn next_wait(&mut self) -> Duration {
+        let wait = self.0;
+        self.0 = (self.0 * 2).min(MAX_BACKOFF);
+        wait
+    }
 }
 
 /// Why a connection ended.
@@ -145,13 +169,13 @@ type Outbox = Vec<Vec<u8>>;
 impl Engine {
     async fn run(mut self) {
         self.open(INDEX_DOC.to_owned(), Arc::new(NoteDoc::new()));
-        let mut backoff = Duration::from_secs(1);
+        let mut backoff = Backoff::new();
         let mut wait: Option<Duration> = None;
         loop {
             if let Some(d) = wait.take() {
                 match self.idle(Some(d)).await {
                     End::Shutdown => return,
-                    End::Reconnect => backoff = Duration::from_secs(1),
+                    End::Reconnect => backoff.reset(),
                     _ => {}
                 }
             }
@@ -164,18 +188,22 @@ impl Engine {
                     // Retrying a refused token would only count as more failures.
                     match self.idle(None).await {
                         End::Shutdown => return,
-                        _ => backoff = Duration::from_secs(1),
+                        _ => backoff.reset(),
                     }
                 }
                 End::RateLimited => {
                     self.events.status(SyncStatus::RateLimited);
                     wait = Some(RATE_LIMIT_WAIT);
                 }
-                End::Reconnect => backoff = Duration::from_secs(1),
+                End::Reconnect => backoff.reset(),
                 End::Dropped => {
                     self.events.status(SyncStatus::Offline);
-                    wait = Some(backoff);
-                    backoff = (backoff * 2).min(MAX_BACKOFF);
+                    // A connection that worked starts the waits over; only
+                    // attempts failing in a row wait longer and longer.
+                    if self.went_online {
+                        backoff.reset();
+                    }
+                    wait = Some(backoff.next_wait());
                 }
             }
         }
@@ -251,6 +279,7 @@ impl Engine {
     }
 
     async fn connection(&mut self) -> End {
+        self.went_online = false;
         let connector = if self.config.ws_url.starts_with("wss:") {
             match crate::tls::client_config() {
                 Ok(c) => Some(tokio_tungstenite::Connector::Rustls(c)),
@@ -292,6 +321,7 @@ impl Engine {
                     last_heard = Instant::now();
                     if !online {
                         online = true;
+                        self.went_online = true;
                         self.events.status(SyncStatus::Online);
                     }
                     let Ok(Some((name, message))) = protocol::decode(&data) else { continue };
@@ -356,5 +386,19 @@ impl Engine {
             Incoming::Authenticated | Incoming::Stateless(_) | Incoming::Ignored => {}
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backoff_doubles_up_to_the_limit_and_resets() {
+        let mut b = Backoff::new();
+        let waits: Vec<u64> = (0..7).map(|_| b.next_wait().as_secs()).collect();
+        assert_eq!(waits, [1, 2, 4, 8, 16, 30, 30]);
+        b.reset();
+        assert_eq!(b.next_wait().as_secs(), 1);
     }
 }

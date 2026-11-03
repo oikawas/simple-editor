@@ -332,6 +332,37 @@ public final class AppModel {
         }
     }
 
+    public enum PomeraImportError: Error, Equatable {
+        /// The text has no date on its last line, so no diary day to put it in.
+        case noDate
+    }
+
+    /// Imports a pomera text as a new note. A date on its last line becomes
+    /// the creation date.
+    @discardableResult
+    public func importPomeraNote(_ text: String) -> OpenNote? {
+        guard let open = createNote(text: text) else { return nil }
+        if let date = PomeraDate.lastLine(of: text), let created = PomeraDate.creationTime(for: date) {
+            open.setCreatedAt(created)
+            currentNoteChanged()
+        }
+        return open
+    }
+
+    /// Imports a pomera text into the diary entry of the date on its last
+    /// line (added at the end if the day has text already), dated that day.
+    /// Returns the date; throws `noDate` when there is none.
+    @discardableResult
+    public func importPomeraDiary(_ text: String) throws -> String {
+        guard let date = PomeraDate.lastLine(of: text) else { throw PomeraImportError.noDate }
+        openDiary(date: date)
+        guard let current, current.diaryDate == date else { return date }
+        current.append(text)
+        if let created = PomeraDate.creationTime(for: date) { current.setCreatedAt(created) }
+        currentNoteChanged()
+        return date
+    }
+
     /// A new note holding `text`, e.g. text imported from a pomera.
     @discardableResult
     public func createNote(text: String) -> OpenNote? {

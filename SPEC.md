@@ -45,7 +45,7 @@ There are two kinds of client:
 
 ### 3.3 Creation and update times
 
-- The **creation time** is recorded by the client when the note is created. The server stores the first value it receives and never overwrites it
+- The **creation time** is recorded by the client when the note is created. The server stores the first value it receives and afterwards takes a new one only when it is earlier (so imported text can carry its date). A later time never overwrites it
 - The **update time** is recorded by the client 0.5 seconds after the last edit to the body or tags. Changes arriving from other devices do not update it. When it is missing, the server uses the time it stored the note
 - Both are shown at the top of the editor
 
@@ -115,7 +115,11 @@ There are two kinds of client:
 #### Import from a pomera's QR codes (iOS only)
 
 - The QR codes a pomera (King Jim) shows for a text are read with the iPhone's main (wide-angle) camera, which does not switch to another lens, and the text is imported
-- "その他" (More) → "ポメラから取り込み" (Import from pomera) in the list saves it as a new note; "ポメラから取り込み" in the editor's toolbar adds it to the end of the open note (diary entries included), on a line of its own
+- Where "その他" (More) → "ポメラから取り込み" (Import from pomera) in the list puts the text depends on the tab shown
+  - **Notes** tab: a new note. When the last line of the text is a date alone (`2024/01/02` or `2024/1/2`), that day becomes the creation date
+  - **Diary** tab: the diary entry of the date on the last line (added at its end, on a line of its own, if the day has text already), with that day as the creation date. Without a date on the last line, an error is shown and the import is cancelled (nothing is saved)
+  - The creation time is now if the day is today, otherwise 0:00. It only moves earlier (an earlier creation date already there is kept). The date line stays in the text
+- "ポメラから取り込み" in the editor's toolbar adds the text to the end of the open note (diary entries included), on a line of its own, without changing the creation date
 - A code holds `KJ:` and two 2-digit numbers (this code's number and the number of codes; `0101` for a text that fits in one) followed by the text in UTF-8. A long text is split over several codes, which are collected and joined as they are shown, in any order (the smaller number is taken as the code's number and the larger as the total). A code not starting with `KJ:` is taken as a whole text on its own
 - While reading, progress is shown, such as "2 / 3 枚を読み取りました（残り 3 枚目）". Codes with a different total (another text) are ignored
 - Once all are read, the whole text is shown, to be saved (or added) or read again. Line breaks become LF and line breaks at the end are removed

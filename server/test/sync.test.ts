@@ -6,7 +6,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import JSZip from "jszip";
 import * as Y from "yjs";
-import { createApp } from "../src/app.js";
+import { createApp, keptCreationTime } from "../src/app.js";
 import { AuthLimiter, clientAddress } from "../src/auth.js";
 import type { Config } from "../src/config.js";
 import { Store } from "../src/db.js";
@@ -280,6 +280,34 @@ test("diary entries are one document per day and export by date", async () => {
   assert.equal(zip.file("diary/2024/01/2024-01-03.txt"), null);
   const index = JSON.parse(await zip.file("notes.json")!.async("string"));
   assert.equal(index.find((e: { id: string }) => e.id === "diary-2024-01-02").diary, "2024-01-02");
+});
+
+test("the creation time only ever moves earlier", async () => {
+  assert.equal(keptCreationTime(undefined, null, 5), 5);
+  assert.equal(keptCreationTime(undefined, 3, 5), 3);
+  assert.equal(keptCreationTime(10, 4, 50), 4);
+  assert.equal(keptCreationTime(10, 20, 50), 10);
+  assert.equal(keptCreationTime(10, null, 50), 10);
+
+  const c = connect("note:created-earlier");
+  await c.synced;
+  c.doc.transact(() => {
+    c.doc.getText("body").insert(0, "imported");
+    c.doc.getMap("meta").set("createdAt", 2_000_000_000_000);
+  });
+  const created = async () =>
+    ((await (await api("/api/notes")).json()) as { id: string; createdAt: number }[]).find(
+      (n) => n.id === "created-earlier",
+    )?.createdAt;
+  await until(async () => (await created()) === 2_000_000_000_000);
+  // An earlier date (text dated in the past) is taken; a later one is not.
+  c.doc.getMap("meta").set("createdAt", 1_500_000_000_000);
+  await until(async () => (await created()) === 1_500_000_000_000);
+  c.doc.getMap("meta").set("createdAt", 1_900_000_000_000);
+  c.doc.getText("body").insert(0, "edited ");
+  await until(async () => app.store.getNote("created-earlier")?.title === "edited imported");
+  assert.equal(await created(), 1_500_000_000_000);
+  c.close();
 });
 
 test("full-text search matches body text and tags", async () => {

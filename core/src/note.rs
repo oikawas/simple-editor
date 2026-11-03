@@ -161,6 +161,14 @@ impl NoteDoc {
         self.meta.insert(txn, "updatedAt", timestamp(now));
     }
 
+    /// Sets the creation time (milliseconds since the epoch), e.g. to the date
+    /// imported text carries. Servers keep the earliest creation time they
+    /// have seen, so this can move it earlier but not later.
+    pub fn set_created_at(&self, ms: i64) {
+        let mut txn = self.doc.transact_mut();
+        self.meta.insert(&mut txn, "createdAt", timestamp(ms));
+    }
+
     /// Sets up a brand-new note.
     pub fn initialize(&self) {
         let now = now_ms();

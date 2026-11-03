@@ -69,6 +69,27 @@ final class PomeraTests: XCTestCase {
         XCTAssertEqual(QRPayload.text(codewords: Self.pack(bits), version: 1), "点")
     }
 
+    func testFindsTheDateOnTheLastLine() throws {
+        XCTAssertEqual(PomeraDate.lastLine(of: "本文\n2024/01/02"), "2024-01-02")
+        XCTAssertEqual(PomeraDate.lastLine(of: "本文\n 2024/1/2 \n\n"), "2024-01-02")
+        XCTAssertNil(PomeraDate.lastLine(of: "2024/01/02\n本文"))
+        XCTAssertNil(PomeraDate.lastLine(of: "本文\n2024/01/02 晴れ"))
+        XCTAssertNil(PomeraDate.lastLine(of: "本文\n2023/02/29"))
+        XCTAssertNil(PomeraDate.lastLine(of: "本文\n２０２４/０１/０２"))
+        XCTAssertNil(PomeraDate.lastLine(of: ""))
+    }
+
+    func testCreationTimeIsTheStartOfThatDayOrNow() throws {
+        let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        let now = Date(timeIntervalSince1970: 1_793_700_000) // 2026-11-04 in Tokyo
+        XCTAssertEqual(
+            PomeraDate.creationTime(for: "2024-01-02", now: now, in: tokyo),
+            ISO8601DateFormatter().date(from: "2024-01-01T15:00:00Z")
+        )
+        let today = Diary.date(of: now, in: tokyo)
+        XCTAssertEqual(PomeraDate.creationTime(for: today, now: now, in: tokyo), now)
+    }
+
     #if canImport(CoreImage)
     /// Generates a code with Core Image and reads it back through its codewords.
     func testRoundTripsGeneratedCodes() throws {

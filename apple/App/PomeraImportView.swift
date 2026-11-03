@@ -6,10 +6,12 @@ import SwiftUI
 import UIKit
 
 /// Reads the QR codes a pomera shows for a text with the main (wide) camera,
-/// then saves the text as a new note or adds it to the open one.
+/// then saves the text as a new note, as the diary entry of the date on its
+/// last line, or adds it to the open note.
 struct PomeraImportView: View {
     enum Target {
         case newNote
+        case diary
         case append(OpenNote)
     }
 
@@ -23,7 +25,18 @@ struct PomeraImportView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if scan.isComplete {
+                if missingDiaryDate {
+                    VStack {
+                        ContentUnavailableView(
+                            "日付がありません",
+                            systemImage: "calendar.badge.exclamationmark",
+                            description: Text("日記として取り込むには、文章の最後の行に日付（例: 2024/01/02）が必要です。取り込みを中止しました。")
+                        )
+                        Button("閉じる") { dismiss() }
+                            .buttonStyle(.borderedProminent)
+                            .padding(.bottom)
+                    }
+                } else if scan.isComplete {
                     result
                 } else if cameraDenied {
                     ContentUnavailableView(
@@ -79,14 +92,22 @@ struct PomeraImportView: View {
             }
             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
-            Text("\(scan.text.count) 文字").font(.caption).foregroundStyle(.secondary)
+            Text(summaryLine).font(.caption).foregroundStyle(.secondary)
             switch target {
             case .newNote:
                 Button("新規メモとして保存") {
-                    model.createNote(text: scan.text)
+                    model.importPomeraNote(scan.text)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+            case .diary:
+                if let date = textDate {
+                    Button(diaryHasText(date) ? "\(Diary.format(date))の日記の末尾に追加" : "\(Diary.format(date))の日記として保存") {
+                        _ = try? model.importPomeraDiary(scan.text)
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             case .append(let note):
                 Button("このノートの末尾に追加") {
                     if model.current?.id == note.id { model.appendToCurrent(scan.text) } else { note.append(scan.text) }
@@ -100,6 +121,25 @@ struct PomeraImportView: View {
             }
             .padding(.bottom)
         }
+    }
+
+    /// The date on the text's last line ("YYYY-MM-DD").
+    private var textDate: String? { PomeraDate.lastLine(of: scan.text) }
+
+    private var summaryLine: String {
+        var line = "\(scan.text.count) 文字"
+        if let date = textDate, case .newNote = target { line += "・作成日 \(Diary.format(date))" }
+        return line
+    }
+
+    private func diaryHasText(_ date: String) -> Bool {
+        model.notes.contains { $0.id == "diary-\(date)" && !$0.title.isEmpty }
+    }
+
+    /// Diary imports need a date on the last line; without one nothing is saved.
+    private var missingDiaryDate: Bool {
+        if case .diary = target, scan.isComplete, textDate == nil { return true }
+        return false
     }
 
     private func received(_ codewords: Data?, _ version: Int, _ string: String?) {

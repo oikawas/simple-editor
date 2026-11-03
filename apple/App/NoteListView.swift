@@ -76,7 +76,7 @@ struct NoteListView: View {
         .refreshable { await model.refreshByUser() }
         #if os(iOS)
         .fullScreenCover(isPresented: $importingFromPomera) {
-            PomeraImportView(target: .newNote).environment(model)
+            PomeraImportView(target: model.mode == .diary ? .diary : .newNote).environment(model)
         }
         #endif
         .fileExporter(isPresented: $exporting, document: exportedZip, contentType: .zip,

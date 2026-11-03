@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Importing text from a pomera's QR codes in the iOS app. The iPhone's main camera reads them, and the text is saved as a new note or added to the end of the open one. Long texts split over several codes are supported
+- Importing text from a pomera's QR codes in the iOS app, read with the iPhone's main camera. Long texts split over several codes are supported. Imported from the list, the text becomes a new note on the Notes tab, or on the Diary tab the entry of the date on its last line (`2024/01/02`; without one, an error cancels the import), with that date as the creation date. From the editor, it is added to the end of the open note
 - Import from Simplenote. Choosing a Simplenote export (`notes.zip` or `notes.json`) in the web app's settings imports the notes outside the trash with their bodies, tags, and dates. A note whose last line is a date (`2024/01/02`) gets that day as its creation date. Importing the same file again adds no duplicates
 - API: `POST /api/import/simplenote`
 - The diary calendar colors Japanese national holidays (including substitute and citizens' holidays) like Sundays and shows their names with the date. Holidays are computed on the device (1980 to 2099)
@@ -36,6 +36,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The server takes a note's creation time when it changes to an earlier one (it used to keep the first value it received). A later one still never overwrites it
 - The macOS and iOS apps retry every 15 minutes while the server cannot be reached (the first retry after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status while offline, reconnects at once
 - The shared core's `ClientConfig` takes `retry_interval_secs`, the wait between failing attempts (left out, it backs off from 1 to 30 seconds as before)
 - The macOS and iOS apps reconnect at once when the network comes back (Wi-Fi returns, airplane mode ends, a switch between Wi-Fi and cellular) and when they return from the background, instead of waiting for the next retry

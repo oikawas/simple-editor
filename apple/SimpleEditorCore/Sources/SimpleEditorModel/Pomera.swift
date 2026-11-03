@@ -171,3 +171,34 @@ public struct PomeraScan: Sendable {
         return text
     }
 }
+
+/// Dates written in pomera texts.
+public enum PomeraDate {
+    /// The date ("YYYY-MM-DD") written alone on the last non-empty line, as
+    /// "2024/01/02" or "2024/1/2"; nil when there is none.
+    public static func lastLine(of text: String) -> String? {
+        guard let line = text.split(whereSeparator: \.isNewline)
+            .map({ $0.trimmingCharacters(in: .whitespaces) })
+            .last(where: { !$0.isEmpty }) else { return nil }
+        let parts = line.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0].count == 4, (1...2).contains(parts[1].count), (1...2).contains(parts[2].count),
+              parts.allSatisfy({ $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }),
+              let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        guard let date = calendar.date(from: DateComponents(year: y, month: m, day: d)),
+              calendar.component(.month, from: date) == m, calendar.component(.day, from: date) == d else { return nil }
+        return String(format: "%04d-%02d-%02d", y, m, d)
+    }
+
+    /// The creation time for a text dated `date` ("YYYY-MM-DD"): now if that
+    /// is today, otherwise the start of that day in the time zone.
+    public static func creationTime(for date: String, now: Date = Date(), in timeZone: TimeZone = .current) -> Date? {
+        if Diary.date(of: now, in: timeZone) == date { return now }
+        let parts = date.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+}

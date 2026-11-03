@@ -93,6 +93,39 @@ final class ServerTests: XCTestCase {
         XCTAssertNil(b.current)
     }
 
+    func testPomeraImports() async throws {
+        let a = makeModel("iPhone")
+        a.start()
+        try await a.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
+        try await until("A online") { a.status == .online }
+        let dayStart = try XCTUnwrap(PomeraDate.creationTime(for: "2020-03-04", now: Date()))
+
+        // A memo dated on its last line is created that day.
+        let memo = try XCTUnwrap(a.importPomeraNote("ポメラのメモ\n2020/3/4"))
+        XCTAssertEqual(memo.text, "ポメラのメモ\n2020/3/4")
+        XCTAssertEqual(memo.createdAt, dayStart)
+        XCTAssertEqual(a.mode, .notes)
+
+        // A diary import goes to that day, added after what is there.
+        XCTAssertEqual(try a.importPomeraDiary("一つ目\n2020/03/04"), "2020-03-04")
+        XCTAssertEqual(a.mode, .diary)
+        XCTAssertEqual(a.current?.id, "diary-2020-03-04")
+        XCTAssertEqual(try a.importPomeraDiary("二つ目\n2020/03/04"), "2020-03-04")
+        XCTAssertEqual(a.current?.text, "一つ目\n2020/03/04\n二つ目\n2020/03/04")
+        XCTAssertEqual(a.current?.createdAt, dayStart)
+        XCTAssertThrowsError(try a.importPomeraDiary("日付なし")) { error in
+            XCTAssertEqual(error as? AppModel.PomeraImportError, .noDate)
+        }
+
+        // The server lists both with the imported creation date.
+        let memoID = memo.id
+        try await until("listed") {
+            let ids = Set(a.notes.filter { $0.createdAt == Int64(dayStart.timeIntervalSince1970 * 1000) }.map(\.id))
+            if !ids.isSuperset(of: [memoID, "diary-2020-03-04"]) { Task { await a.refresh() } }
+            return ids.isSuperset(of: [memoID, "diary-2020-03-04"])
+        }
+    }
+
     func testDiary() async throws {
         let a = makeModel("Mac")
         a.start()

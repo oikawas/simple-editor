@@ -180,13 +180,15 @@ export class Store {
       .run(name, Buffer.from(state));
   }
 
-  // created_at is kept from the first time the note was seen and never overwritten.
+  // created_at is kept from the first time the note was seen; it only moves
+  // to an earlier time (see keptCreationTime in app.ts), never a later one.
   upsertNote(note: NoteSummary): void {
     this.db
       .prepare(
         `INSERT INTO notes (id, title, preview, tags, created_at, updated_at, deleted)
          VALUES (@id, @title, @preview, @tags, @createdAt, @updatedAt, @deleted)
          ON CONFLICT(id) DO UPDATE SET
+           created_at = MIN(notes.created_at, excluded.created_at),
            title = excluded.title,
            preview = excluded.preview,
            tags = excluded.tags,

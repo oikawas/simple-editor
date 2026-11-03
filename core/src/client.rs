@@ -294,6 +294,12 @@ impl Note {
         self.doc.tags()
     }
 
+    /// Sets the creation time (milliseconds since the epoch). The server keeps
+    /// the earliest one it has seen, so it can be moved earlier, not later.
+    pub fn set_created_at(&self, ms: i64) {
+        self.doc.set_created_at(ms);
+    }
+
     /// Adds a tag (whitespace becomes "-"); false when it is empty or already there.
     pub fn add_tag(&self, tag: String) -> bool {
         self.doc.add_tag(&tag)

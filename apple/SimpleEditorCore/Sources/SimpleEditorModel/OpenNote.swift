@@ -100,6 +100,15 @@ public final class OpenNote: Identifiable {
         reloadMeta()
     }
 
+    /// Moves the creation time to `date` if that is earlier (or the note has
+    /// none yet). The server keeps the earliest one it has seen, so a later
+    /// time would not stick.
+    public func setCreatedAt(_ date: Date) {
+        guard createdAt.timeIntervalSince1970 <= 0 || date < createdAt else { return }
+        note.setCreatedAt(ms: Int64((date.timeIntervalSince1970 * 1000).rounded()))
+        reloadMeta()
+    }
+
     public func addTag(_ tag: String) {
         if note.addTag(tag: tag) { reloadMeta() }
     }

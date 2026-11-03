@@ -140,7 +140,7 @@ export function createApp(config: Config) {
     store.upsertNote({
       id,
       ...s,
-      createdAt: previous?.createdAt ?? s.createdAt ?? now,
+      createdAt: keptCreationTime(previous?.createdAt, s.createdAt, now),
       updatedAt: s.updatedAt ?? now,
     });
     store.indexBody(id, bodyOf(document), s.tags);
@@ -306,6 +306,14 @@ export function createApp(config: Config) {
   }
 
   return { server, store, limiter };
+}
+
+// The creation time to keep: the first one seen, unless the note now says
+// an earlier one (imported text dated in the past). A later one is ignored,
+// so a device with a wrong clock cannot make a note look newer.
+export function keptCreationTime(previous: number | undefined, fromDoc: number | null, now: number): number {
+  if (previous === undefined) return fromDoc ?? now;
+  return fromDoc !== null && fromDoc < previous ? fromDoc : previous;
 }
 
 function deviceName(raw: unknown): string {

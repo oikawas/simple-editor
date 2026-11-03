@@ -90,7 +90,7 @@ There are two kinds of client:
 - Viewing and restoring history requires a connection to the server
 - Versions are never deleted (no retention limit)
 
-### 3.9 Export
+### 3.9 Export and import
 
 - **One note**: the ".txt" button in the editor saves the current note's body as a text file. It is generated on the device, so it works offline
 - **All notes**: "すべて書き出し" (Export all) in the settings downloads a zip containing:
@@ -154,7 +154,7 @@ There are two kinds of client:
 ### 3.13 Diary
 
 - The "日記" (Diary) and "メモ" (Notes) tabs above the list switch between notes (3.1) and the diary. Which one is shown is kept per device. Switching does not close the open note or entry
-- The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today is outlined
+- The diary has **one entry per day**. The diary tab shows a month calendar (weeks start on Sunday); picking a date opens that day's entry. Days with an entry are marked, and today stands out (in the accent color on the web and Linux, outlined on macOS and iOS)
 - Japanese national holidays (including substitute and citizens' holidays) are colored like Sundays, and dates show the holiday's name (for example 2026年11月3日（火・文化の日）). Holidays are computed on the device from the rules of the holiday law, so this works offline, for 1980 to 2099
 - Below the calendar, the shown month's entries are listed, newest day first (date and the start of the text)
 - The "今日" (Today) button in the diary tab opens today's entry. Dates are in the device's time zone
@@ -369,3 +369,6 @@ Everything except `/api/health` and device registration requires `Authorization:
 - Changing the server's IP address (or name) makes each device treat the app as a different one. Edits not yet sent at that point are lost
 - Body formatting (such as rendering Markdown) is not handled
 - The native apps do not show other devices' cursors (only the web app does)
+- Import from Simplenote is only in the web app, and import from a pomera only in the iOS app
+- No published description of the pomera's QR code format was found; it is inferred from reading real codes (section 3.9)
+- The Linux app does not reconnect on network changes or when its window is shown; it only retries at intervals of 1 to 30 seconds

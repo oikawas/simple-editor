@@ -107,6 +107,8 @@ struct Entry {
 pub struct SyncConfig {
     pub ws_url: String,
     pub token: String,
+    /// Fixed wait between failing attempts; None to back off (see Backoff).
+    pub retry_interval: Option<Duration>,
 }
 
 pub fn start(
@@ -203,7 +205,12 @@ impl Engine {
                     if self.went_online {
                         backoff.reset();
                     }
-                    wait = Some(backoff.next_wait());
+                    wait = Some(match self.config.retry_interval {
+                        // One quick retry after a working connection drops,
+                        // then the fixed interval.
+                        Some(interval) if !self.went_online => interval,
+                        _ => backoff.next_wait(),
+                    });
                 }
             }
         }

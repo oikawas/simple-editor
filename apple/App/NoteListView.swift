@@ -69,7 +69,7 @@ struct NoteListView: View {
                 .disabled(model.phase != .ready)
             }
         }
-        .refreshable { await model.refresh() }
+        .refreshable { await model.refreshByUser() }
         .fileExporter(isPresented: $exporting, document: exportedZip, contentType: .zip,
                       defaultFilename: exportedZip?.filename) { result in
             if case .failure(let error) = result { model.errorMessage = error.localizedDescription }
@@ -171,11 +171,21 @@ private struct StatusBar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(text).font(.caption).foregroundStyle(.secondary)
-            Spacer()
+        // While offline, tapping tries to connect at once instead of waiting
+        // for the next retry.
+        Button { model.retryIfOffline() } label: {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(text).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if model.status == .offline {
+                    Image(systemName: "arrow.clockwise").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityHint(model.status == .offline ? "タップすると今すぐ接続し直します" : "")
         .padding(.horizontal)
         .padding(.vertical, 6)
         .background(.bar)

@@ -73,6 +73,10 @@ public final class AppModel {
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     private static let modeKey = "sidebarMode"
+    /// Seconds between reconnection attempts while the server stays out of
+    /// reach. A dropped connection is first retried after 1 second; asking to
+    /// refresh, the network coming back, or returning to the app retries at once.
+    public static let retryIntervalSeconds: UInt32 = 15 * 60
 
     public init(tokens: TokenStore, defaults: UserDefaults = .standard, dataDirectory: URL, defaultDeviceName: String) {
         self.tokens = tokens
@@ -111,7 +115,10 @@ public final class AppModel {
     private func connect(token: String) {
         disconnect()
         let (stream, continuation) = AsyncStream.makeStream(of: CoreEvent.self)
-        let config = ClientConfig(serverUrl: settings.serverURL, deviceToken: token, dataDir: dataDirectory.path)
+        let config = ClientConfig(
+            serverUrl: settings.serverURL, deviceToken: token, dataDir: dataDirectory.path,
+            retryIntervalSecs: Self.retryIntervalSeconds
+        )
         do {
             let client = try Client(config: config, listener: Listener(continuation))
             self.client = client
@@ -139,6 +146,17 @@ public final class AppModel {
         case .unauthorized, .rateLimited: return
         default: client.reconnect(deviceToken: nil)
         }
+    }
+
+    /// Tries to connect at once if offline, e.g. when the user asks to refresh.
+    public func retryIfOffline() {
+        if status == .offline { reconnectNow() }
+    }
+
+    /// A refresh the user asked for: reconnects if offline, then reloads the list.
+    public func refreshByUser() async {
+        retryIfOffline()
+        await refresh()
     }
 
     private func disconnect() {

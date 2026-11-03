@@ -35,6 +35,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The macOS and iOS apps retry every 15 minutes while the server cannot be reached (the first retry after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status while offline, reconnects at once
+- The shared core's `ClientConfig` takes `retry_interval_secs`, the wait between failing attempts (left out, it backs off from 1 to 30 seconds as before)
 - The macOS and iOS apps reconnect at once when the network comes back (Wi-Fi returns, airplane mode ends, a switch between Wi-Fi and cellular) and when they return from the background, instead of waiting for the next retry
 - The Linux app's diary calendar is now drawn by the app, with Sundays and holidays in red and Saturdays in blue (the web app's colors). It used GTK's calendar, which showed holidays only in the date line
 - A new app icon for the web app (PWA), macOS, iOS, and Linux. The artwork and the script that renders it are in `design/icon/`

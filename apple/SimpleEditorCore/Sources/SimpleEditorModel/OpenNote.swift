@@ -87,6 +87,19 @@ public final class OpenNote: Identifiable {
         reloadMeta()
     }
 
+    /// Adds text at the end, on a line of its own, as an edit made outside
+    /// the text view (which then shows it), e.g. text imported from a pomera.
+    public func append(_ added: String) {
+        guard !added.isEmpty else { return }
+        let separator = text.isEmpty || text.hasSuffix("\n") ? "" : "\n"
+        note.editBody(start: UInt32(note.body().utf16.count), delete: 0, insert: separator + added)
+        text = note.body()
+        let end = text.utf16.count
+        selection = end..<end
+        externalRevision += 1
+        reloadMeta()
+    }
+
     public func addTag(_ tag: String) {
         if note.addTag(tag: tag) { reloadMeta() }
     }

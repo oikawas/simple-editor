@@ -24,7 +24,7 @@ final class ServerTests: XCTestCase {
         return AppModel(tokens: MemoryTokenStore(), defaults: defaults, dataDirectory: dir, defaultDeviceName: name)
     }
 
-    func until(_ what: String, _ check: () -> Bool) async throws {
+    func until(_ what: String, _ check: @escaping () -> Bool) async throws {
         for _ in 0..<300 {
             if check() { return }
             try await Task.sleep(for: .milliseconds(50))

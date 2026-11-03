@@ -210,7 +210,7 @@ There are two kinds of client:
 - Everything in the native apps except the UI (sync, server communication, on-device storage) is a Rust library, `core/`. UniFFI generates Swift and Kotlin APIs that each UI calls
 - The CRDT is yrs (the Rust implementation of Yjs), so the data format and protocol match the server and web app and they sync with each other. Text positions count UTF-16 units, matching Swift, Kotlin, and JavaScript strings
 - One WebSocket carries all open notes and `__index` (the Hocuspocus v4 protocol). A light message every 25 seconds avoids the server's 60-second idle cut-off, and the connection is replaced if nothing arrives for 55 seconds
-- Reconnects back off from 1 to 30 seconds, doubling each time. A refused device token stops reconnecting; hitting the attempt limit waits 60 seconds
+- Reconnects back off from 1 to 30 seconds, doubling each time. When a connection that had worked drops, the count starts again from 1 second. A refused device token stops reconnecting; hitting the attempt limit waits 60 seconds
 - SQLite on the device keeps each note's Yjs state, the notes with unsent changes, and the last fetched list. Notes with unsent changes are reopened on startup and sent once connected
 - TLS is verified with the operating system's certificate store (rustls-platform-verifier), so the local CA's root certificate installed on the device is honored
 - Each app stores the device token in the OS's secure storage (the Keychain and the like) and hands it to the core on startup
@@ -239,6 +239,8 @@ There are two kinds of client:
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL and device name in UserDefaults; notes in the app's data (Application Support)
+- When the network comes back (the OS network path (`NWPathMonitor`) goes from unusable to usable, or a usable path moves to other interfaces, such as Wi-Fi to cellular), the app reconnects at once instead of waiting for the next retry. A usable path does not mean the server can be reached (outside the LAN, say); then retries go on at the usual intervals
+- The app also reconnects at once when it returns to the foreground after 20 seconds or more in the background, or while it is not online (while suspended it cannot send keepalives, so the server may have closed the connection). Neither happens when the device token was refused or the attempt limit was hit
 - Both apps ask for access to the local network (`NSLocalNetworkUsageDescription`). The macOS app is sandboxed and may only make network connections and write files the user chooses
 
 ## 5. Data model

@@ -7,6 +7,7 @@ struct NoteListView: View {
     @Binding var showSettings: Bool
     @State private var exportedZip: ZipFile?
     @State private var exporting = false
+    @State private var importingFromPomera = false
 
     var body: some View {
         @Bindable var model = model
@@ -65,11 +66,19 @@ struct NoteListView: View {
                 Menu("その他", systemImage: "ellipsis.circle") {
                     Button("設定と端末", systemImage: "gearshape") { showSettings = true }
                     Button("すべて書き出し (.zip)", systemImage: "square.and.arrow.up") { exportAll() }
+                    #if os(iOS)
+                    Button("ポメラから取り込み", systemImage: "qrcode.viewfinder") { importingFromPomera = true }
+                    #endif
                 }
                 .disabled(model.phase != .ready)
             }
         }
         .refreshable { await model.refreshByUser() }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $importingFromPomera) {
+            PomeraImportView(target: .newNote).environment(model)
+        }
+        #endif
         .fileExporter(isPresented: $exporting, document: exportedZip, contentType: .zip,
                       defaultFilename: exportedZip?.filename) { result in
             if case .failure(let error) = result { model.errorMessage = error.localizedDescription }

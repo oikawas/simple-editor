@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Importing text from a pomera's QR codes in the iOS app. The iPhone's main camera reads them, and the text is saved as a new note or added to the end of the open one. Long texts split over several codes are supported
 - Import from Simplenote. Choosing a Simplenote export (`notes.zip` or `notes.json`) in the web app's settings imports the notes outside the trash with their bodies, tags, and dates. A note whose last line is a date (`2024/01/02`) gets that day as its creation date. Importing the same file again adds no duplicates
 - API: `POST /api/import/simplenote`
 - The diary calendar colors Japanese national holidays (including substitute and citizens' holidays) like Sundays and shows their names with the date. Holidays are computed on the device (1980 to 2099)

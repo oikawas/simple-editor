@@ -7,6 +7,7 @@ struct EditorView: View {
     @State private var newTag = ""
     @State private var showHistory = false
     @State private var exporting = false
+    @State private var importingFromPomera = false
     @AppStorage(EditorFont.familyKey) private var fontFamily = ""
     @AppStorage(EditorFont.sizeKey) private var fontSize = EditorFont.defaultSize
     @AppStorage(EditorFont.lineHeightKey) private var lineHeight = EditorFont.defaultLineHeight
@@ -33,6 +34,9 @@ struct EditorView: View {
             ToolbarItemGroup {
                 Button("編集履歴", systemImage: "clock.arrow.circlepath") { showHistory = true }
                 Button("テキストとして書き出し", systemImage: "square.and.arrow.up") { exporting = true }
+                #if os(iOS)
+                Button("ポメラから取り込み", systemImage: "qrcode.viewfinder") { importingFromPomera = true }
+                #endif
                 // Diary entries do not go to the trash.
                 if note.diaryDate == nil {
                     Button(note.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ",
@@ -46,6 +50,11 @@ struct EditorView: View {
         .sheet(isPresented: $showHistory) {
             HistoryView(note: note)
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $importingFromPomera) {
+            PomeraImportView(target: .append(note)).environment(model)
+        }
+        #endif
         .fileExporter(isPresented: $exporting, document: TextFile(text: note.text), contentType: .plainText,
                       defaultFilename: note.diaryDate.map { "\($0).txt" } ?? TextFile.filename(for: note.title)) { result in
             if case .failure(let error) = result { model.errorMessage = error.localizedDescription }

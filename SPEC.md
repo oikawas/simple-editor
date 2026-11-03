@@ -112,6 +112,16 @@ There are two kinds of client:
 - The imported content becomes each note's first version in the history
 - Files up to 100 MB are accepted
 
+#### Import from a pomera's QR codes (iOS only)
+
+- The QR codes a pomera (King Jim) shows for a text are read with the iPhone's main (wide-angle) camera, which does not switch to another lens, and the text is imported
+- "その他" (More) → "ポメラから取り込み" (Import from pomera) in the list saves it as a new note; "ポメラから取り込み" in the editor's toolbar adds it to the end of the open note (diary entries included), on a line of its own
+- A code holds `KJ:` and two 2-digit numbers (this code's number and the number of codes; `0101` for a text that fits in one) followed by the text in UTF-8. A long text is split over several codes, which are collected and joined as they are shown, in any order (the smaller number is taken as the code's number and the larger as the total). A code not starting with `KJ:` is taken as a whole text on its own
+- While reading, progress is shown, such as "2 / 3 枚を読み取りました（残り 3 枚目）". Codes with a different total (another text) are ignored
+- Once all are read, the whole text is shown, to be saved (or added) or read again. Line breaks become LF and line breaks at the end are removed
+- To avoid garbled text, the text is taken from the code's data (the error-corrected codewords) rather than the string the OS guesses, and read as UTF-8 (Shift_JIS when an ECI or kanji mode says so)
+- The camera zooms so a code filling most of the frame is no closer than the lens can focus (the same calculation as Apple's AVCamBarcode sample). The app asks for camera access (`NSCameraUsageDescription`)
+
 ### 3.10 Device registration and authentication
 
 - The server's `AUTH_TOKEN` is the **registration token**, used only to register new devices. It cannot read or write notes

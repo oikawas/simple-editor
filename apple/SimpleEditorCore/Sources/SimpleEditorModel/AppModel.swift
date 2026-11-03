@@ -332,6 +332,22 @@ public final class AppModel {
         }
     }
 
+    /// A new note holding `text`, e.g. text imported from a pomera.
+    @discardableResult
+    public func createNote(text: String) -> OpenNote? {
+        guard let open = createNote() else { return nil }
+        open.append(text)
+        currentNoteChanged()
+        return open
+    }
+
+    /// Adds `text` at the end of the open note.
+    public func appendToCurrent(_ text: String) {
+        guard let current else { return }
+        current.append(text)
+        currentNoteChanged()
+    }
+
     public func closeCurrent() {
         guard let current else { return }
         client?.closeNote(id: current.id)

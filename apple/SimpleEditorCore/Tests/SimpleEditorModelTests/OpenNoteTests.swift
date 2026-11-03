@@ -34,6 +34,20 @@ final class OpenNoteTests: XCTestCase {
         XCTAssertEqual(note.text, "X Hello world、変換した")
     }
 
+    func testAppendPutsTextOnALineOfItsOwn() throws {
+        let note = try makeNote()
+        note.append("ポメラの文章")
+        XCTAssertEqual(note.text, "ポメラの文章")
+        let before = note.externalRevision
+        note.append("二つ目")
+        XCTAssertEqual(note.text, "ポメラの文章\n二つ目")
+        XCTAssertEqual(note.note.body(), note.text)
+        XCTAssertEqual(note.selection, note.text.utf16.count..<note.text.utf16.count)
+        // The text view is told to show the new text.
+        XCTAssertEqual(note.externalRevision, before + 1)
+        XCTAssertEqual(note.title, "ポメラの文章")
+    }
+
     func testDifferingSpanKeepsSurrogatePairsWhole() {
         let span = OpenNote.differingSpan("a😀b", "a😃b")
         XCTAssertEqual(span?.0, 1)

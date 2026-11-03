@@ -62,6 +62,11 @@ pub struct ClientConfig {
     pub device_token: String,
     /// A directory the app owns, for notes kept on the device.
     pub data_dir: String,
+    /// Seconds between reconnection attempts that keep failing; None to back
+    /// off from 1 to 30 seconds. Either way, a dropped connection that had
+    /// worked is tried again after 1 second first.
+    #[uniffi(default = None)]
+    pub retry_interval_secs: Option<u32>,
 }
 
 /// Callbacks to the app. They arrive on a background thread.
@@ -106,7 +111,11 @@ impl Client {
         let http = api::http_client()?;
         let sync = sync::start(
             runtime().handle(),
-            SyncConfig { ws_url: sync_url(&config.server_url), token: config.device_token.clone() },
+            SyncConfig {
+                ws_url: sync_url(&config.server_url),
+                token: config.device_token.clone(),
+                retry_interval: config.retry_interval_secs.map(|s| std::time::Duration::from_secs(s.into())),
+            },
             store.clone(),
             Arc::new(Events(listener)),
         );

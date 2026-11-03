@@ -555,6 +555,7 @@ impl App {
             server_url: settings.server_url.clone(),
             device_token: token,
             data_dir: config::data_dir().to_string_lossy().into_owned(),
+            retry_interval_secs: None,
         };
         match Client::new(config, Arc::new(Listener(tx))) {
             Ok(client) => {

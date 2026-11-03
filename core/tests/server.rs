@@ -130,6 +130,10 @@ struct Device {
 }
 
 async fn device(server: &Server, name: &str) -> Device {
+    device_with(server, name, None).await
+}
+
+async fn device_with(server: &Server, name: &str, retry_interval_secs: Option<u32>) -> Device {
     let creds = register_device(server.url(), REGISTRATION_TOKEN.into(), name.into()).await.unwrap();
     let data = tempfile::tempdir().unwrap();
     let events = Arc::new(Recorder::default());
@@ -138,6 +142,7 @@ async fn device(server: &Server, name: &str) -> Device {
             server_url: server.url(),
             device_token: creds.token.clone(),
             data_dir: data.path().to_string_lossy().into(),
+            retry_interval_secs,
         },
         events.clone(),
     )
@@ -297,4 +302,26 @@ async fn retries_start_quickly_again_after_a_working_connection() {
     let seen = a.events.statuses.lock().unwrap().len();
     until("retrying", || a.events.statuses.lock().unwrap()[seen..].contains(&SyncStatus::Connecting)).await;
     assert!(dropped_at.elapsed() < Duration::from_secs(4), "retried after {:?}", dropped_at.elapsed());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_fixed_retry_interval_waits_after_one_quick_retry() {
+    let mut server = Server::start();
+    let a = device_with(&server, "a", Some(600)).await;
+    let connecting_count =
+        || a.events.statuses.lock().unwrap().iter().filter(|s| **s == SyncStatus::Connecting).count();
+    let before = connecting_count();
+
+    // The dropped connection is tried once more right away...
+    server.stop();
+    until("quick retry", || connecting_count() == before + 1).await;
+    until("quick retry failed", || a.events.last_status() == Some(SyncStatus::Offline)).await;
+    // ...and then not again until the interval has passed.
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    assert_eq!(connecting_count(), before + 1);
+
+    // Asking to reconnect (a refresh in the app) tries at once.
+    server.restart();
+    a.client.reconnect(None);
+    until("online again", || a.events.last_status() == Some(SyncStatus::Online)).await;
 }

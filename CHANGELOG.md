@@ -46,6 +46,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- In the iOS app (including the iPad app running on a Mac), tapping (clicking) blank space in a run of empty lines put the caret on the last line and scrolled there instead of on that line. The text view now uses TextKit 1
 - In the native apps (Linux, macOS, iOS), the reconnection wait never went back to 1 second. Once it had grown to 30 seconds, every later drop waited 30 seconds, however stable the connection had been. A connection that worked now starts the count again from 1 second
 - In the web app, opening a note set its update time to the time it was opened
 

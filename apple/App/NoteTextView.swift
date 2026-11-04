@@ -189,7 +189,11 @@ extension NoteTextView.Coordinator: NSTextViewDelegate {
 #else
 extension NoteTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        // TextKit 1. With TextKit 2, tapping blank space in a run of empty
+        // lines could put the caret on the last line and scroll there (seen
+        // when the iOS app runs on a Mac): its estimated line heights put the
+        // tap below the end of the text.
+        let textView = UITextView(usingTextLayoutManager: false)
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.textColor = .label

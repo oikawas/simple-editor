@@ -121,15 +121,15 @@ private struct NoteRow: View {
                 Text(Diary.format(date))
                     .font(.headline)
                     .lineLimit(1)
-                Text(item.snippet ?? [item.summary.title, item.summary.preview].filter { !$0.isEmpty }.joined(separator: " "))
+                Text(highlighted(item.snippet ?? [item.summary.title, item.summary.preview].filter { !$0.isEmpty }.joined(separator: " ")))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             } else {
-                Text(item.summary.title.isEmpty ? "（無題）" : item.summary.title)
+                Text(item.summary.title.isEmpty ? AttributedString("（無題）") : highlighted(item.summary.title))
                     .font(.headline)
                     .lineLimit(1)
-                Text(item.snippet ?? item.summary.preview)
+                Text(highlighted(item.snippet ?? item.summary.preview))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -147,6 +147,19 @@ private struct NoteRow: View {
             .lineLimit(1)
         }
         .padding(.vertical, 2)
+    }
+
+    /// The text with the searched words marked, as in the web app.
+    private func highlighted(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        for match in SearchMatch.ranges(of: query, in: text, limit: 50) {
+            guard let range = Range(match, in: text),
+                  let lower = AttributedString.Index(range.lowerBound, within: attributed),
+                  let upper = AttributedString.Index(range.upperBound, within: attributed) else { continue }
+            attributed[lower..<upper].backgroundColor = Color.yellow.opacity(0.4)
+            attributed[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return attributed
     }
 }
 

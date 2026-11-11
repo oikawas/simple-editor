@@ -23,6 +23,7 @@ struct EditorView: View {
                 note: note,
                 font: EditorFont.platformFont(family: fontFamily, size: fontSize),
                 lineHeight: lineHeight,
+                highlight: model.searchText,
                 onEdit: { model.currentNoteChanged() }
             )
         }

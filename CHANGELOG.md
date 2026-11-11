@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The macOS app shows the first line of a note (its title) bold and 1.2 times as large (not in diary entries). While searching, matching words are marked in the text, and a note opened from the results scrolls to the first match
+- The macOS and iOS apps highlight searched words in the list's titles and excerpts
 - Importing text from a pomera's QR codes in the iOS app, read with the iPhone's main camera. Long texts split over several codes are supported. Imported from the list, the text becomes a new note on the Notes tab, or on the Diary tab the entry of the date on its last line (`2024/01/02`; without one, an error cancels the import), with that date as the creation date. From the editor, it is added to the end of the open note
 - Import from Simplenote. Choosing a Simplenote export (`notes.zip` or `notes.json`) in the web app's settings imports the notes outside the trash with their bodies, tags, and dates. A note whose last line is a date (`2024/01/02`) gets that day as its creation date. Importing the same file again adds no duplicates
 - API: `POST /api/import/simplenote`

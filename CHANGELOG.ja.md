@@ -6,6 +6,8 @@
 
 ## [未リリース]
 
+## [0.2.0] - 2026-11-18
+
 ### 追加
 
 - macOS 版で、本文の 1 行目（タイトル）を太字・1.2 倍で表示する（日記は除く）。検索中は本文の一致した語に色を付け、検索結果から開いたノートは最初の一致箇所まで表示を送る
@@ -77,5 +79,6 @@
 - `./data` がない状態で compose を起動すると、Docker が root 所有で作成したディレクトリにアプリが書き込めず起動に失敗する問題。起動時に所有者を整えてから root 以外のユーザーに権限を落とすようにした
 - compose で `HISTORY_INTERVAL_MINUTES` がアプリに渡されていなかった問題
 
-[未リリース]: https://github.com/oikawas/simple-editor/compare/v0.1.0...HEAD
+[未リリース]: https://github.com/oikawas/simple-editor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/oikawas/simple-editor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oikawas/simple-editor/releases/tag/v0.1.0

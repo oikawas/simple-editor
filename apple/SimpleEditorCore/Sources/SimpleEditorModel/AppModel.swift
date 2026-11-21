@@ -68,6 +68,7 @@ public final class AppModel {
     @ObservationIgnored private var client: Client?
     @ObservationIgnored private let tokens: TokenStore
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let cursors: CursorMemory
     @ObservationIgnored private let dataDirectory: URL
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -81,6 +82,7 @@ public final class AppModel {
     public init(tokens: TokenStore, defaults: UserDefaults = .standard, dataDirectory: URL, defaultDeviceName: String) {
         self.tokens = tokens
         self.defaults = defaults
+        self.cursors = CursorMemory(defaults: defaults)
         self.dataDirectory = dataDirectory
         var settings = StoredSettings.load(from: defaults)
         if settings.deviceName.isEmpty { settings.deviceName = defaultDeviceName }
@@ -308,7 +310,10 @@ public final class AppModel {
         guard let client, current?.id != id else { return }
         closeCurrent()
         do {
-            current = OpenNote(note: try client.openNote(id: id))
+            let open = OpenNote(note: try client.openNote(id: id))
+            // The note opens where the cursor was when it was last left on this device.
+            if let saved = cursors.load(id: id, length: open.text.utf16.count) { open.selection = saved }
+            current = open
         } catch {
             errorMessage = Self.describe(error)
         }
@@ -381,8 +386,16 @@ public final class AppModel {
 
     public func closeCurrent() {
         guard let current else { return }
+        rememberCursor()
         client?.closeNote(id: current.id)
         self.current = nil
+    }
+
+    /// Saves where the cursor is in the open note, e.g. before the app goes
+    /// to the background, where it may be ended without closing the note.
+    public func rememberCursor() {
+        guard let current else { return }
+        cursors.save(id: current.id, selection: current.selection)
     }
 
     /// The open note was edited: reflect it in the list.

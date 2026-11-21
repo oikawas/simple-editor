@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- A note opens where the cursor was when it was last left on this device, scrolled into view. The position is kept per device and not synced (the 500 most recent). In the web, Linux, macOS, and iOS apps
+
 ## [0.2.0] - 2026-11-18
 
 ### Added

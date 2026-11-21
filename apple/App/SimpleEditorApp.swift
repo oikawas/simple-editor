@@ -3,6 +3,8 @@ import SimpleEditorModel
 import SwiftUI
 #if os(iOS)
 import UIKit
+#else
+import AppKit
 #endif
 
 @main
@@ -25,10 +27,19 @@ struct SimpleEditorApp: App {
                     model.start()
                     network.start { model.reconnectNow() }
                 }
+                #if os(macOS)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    model.rememberCursor()
+                }
+                #endif
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
+            case .inactive:
+                // The app may be ended from here on without closing the note.
+                model.rememberCursor()
             case .background:
+                model.rememberCursor()
                 backgroundSince = Date()
             case .active:
                 // While suspended the app sends no keepalives, so the server

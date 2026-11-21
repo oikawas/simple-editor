@@ -167,6 +167,36 @@ struct NoteTextView {
         }
         #endif
 
+        /// Puts the cursor where the note has it: where it was last left on
+        /// this device, when the note was just opened.
+        func restoreSelection() {
+            guard let textView else { return }
+            let range = clamped(parent.note.selection, to: viewText.utf16.count)
+            isApplying = true
+            defer { isApplying = false }
+            #if os(macOS)
+            textView.setSelectedRange(range)
+            updateTypingFont()
+            #else
+            textView.selectedRange = range
+            #endif
+        }
+
+        /// Brings the cursor into view.
+        func revealSelection() {
+            guard let textView else { return }
+            #if os(macOS)
+            textView.scrollRangeToVisible(textView.selectedRange())
+            #else
+            textView.scrollRangeToVisible(textView.selectedRange)
+            #endif
+        }
+
+        private func clamped(_ selection: Range<Int>, to length: Int) -> NSRange {
+            let lower = min(selection.lowerBound, length)
+            return NSRange(location: lower, length: min(selection.upperBound, length) - lower)
+        }
+
         private var composing: Bool {
             #if os(macOS)
             textView?.hasMarkedText() ?? false
@@ -221,9 +251,7 @@ struct NoteTextView {
             guard let textView else { return }
             isApplying = true
             defer { isApplying = false }
-            let length = text.utf16.count
-            let lower = min(selection.lowerBound, length)
-            let range = NSRange(location: lower, length: min(selection.upperBound, length) - lower)
+            let range = clamped(selection, to: text.utf16.count)
             #if os(macOS)
             textView.string = text
             #else
@@ -260,8 +288,14 @@ extension NoteTextView: NSViewRepresentable {
         textView.string = note.text
         context.coordinator.textView = textView
         context.coordinator.applyStyle()
+        context.coordinator.restoreSelection()
+        // Once laid out, show the cursor, or the first searched word when
+        // the note was opened from search results.
         let coordinator = context.coordinator
-        DispatchQueue.main.async { coordinator.revealFirstMatch() }
+        DispatchQueue.main.async {
+            coordinator.revealSelection()
+            coordinator.revealFirstMatch()
+        }
         return scrollView
     }
 
@@ -302,6 +336,9 @@ extension NoteTextView: UIViewRepresentable {
         textView.text = note.text
         context.coordinator.textView = textView
         context.coordinator.applyStyle()
+        context.coordinator.restoreSelection()
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { coordinator.revealSelection() }
         return textView
     }
 

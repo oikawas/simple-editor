@@ -6,6 +6,8 @@
 
 ## [未リリース]
 
+## [0.3.0] - 2026-11-22
+
 ### 追加
 
 - ノートを開くと、その端末で最後にそのノートを離れたときの入力位置から再開し、そこまで表示を送る。位置は端末ごとに保存し、同期はしない（最近の 500 件まで）。Web・Linux・macOS・iOS の各版に対応
@@ -83,6 +85,7 @@
 - `./data` がない状態で compose を起動すると、Docker が root 所有で作成したディレクトリにアプリが書き込めず起動に失敗する問題。起動時に所有者を整えてから root 以外のユーザーに権限を落とすようにした
 - compose で `HISTORY_INTERVAL_MINUTES` がアプリに渡されていなかった問題
 
-[未リリース]: https://github.com/oikawas/simple-editor/compare/v0.2.0...HEAD
+[未リリース]: https://github.com/oikawas/simple-editor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/oikawas/simple-editor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oikawas/simple-editor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oikawas/simple-editor/releases/tag/v0.1.0

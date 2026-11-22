@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
 ### Added
 
 - A note opens where the cursor was when it was last left on this device, scrolled into view. The position is kept per device and not synced (the 500 most recent). In the web, Linux, macOS, and iOS apps
@@ -83,6 +85,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Starting compose without an existing `./data` failed because Docker created the directory as root and the app could not write to it. The container now fixes the ownership on startup, then drops to a non-root user
 - Compose did not pass `HISTORY_INTERVAL_MINUTES` to the app
 
-[Unreleased]: https://github.com/oikawas/simple-editor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/oikawas/simple-editor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/oikawas/simple-editor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oikawas/simple-editor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oikawas/simple-editor/releases/tag/v0.1.0

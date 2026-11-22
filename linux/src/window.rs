@@ -2,6 +2,7 @@
 //! on the right.
 
 use crate::config::{self, Settings};
+use crate::cursors::Cursors;
 use crate::calendar::DiaryCalendar;
 use crate::{history, settings_dialog};
 use adw::prelude::*;
@@ -363,6 +364,15 @@ fn connect_signals(app: &Rc<App>) {
         if let (Some(client), Some(note)) = (client, note) {
             history::open(app, client, note);
         }
+    });
+
+    // The window may close with a note open.
+    let weak = Rc::downgrade(app);
+    app.ui.window.connect_close_request(move |_| {
+        if let Some(app) = weak.upgrade() {
+            app.remember_cursor();
+        }
+        glib::Propagation::Proceed
     });
 
     let weak = Rc::downgrade(app);
@@ -912,6 +922,7 @@ impl App {
     }
 
     fn close_current(&self) {
+        self.remember_cursor();
         let (client, note) = {
             let mut st = self.state.borrow_mut();
             (st.client.clone(), st.current.take())
@@ -932,9 +943,40 @@ impl App {
         }
         self.close_current();
         match client.open_note(id.to_owned()) {
-            Ok(note) => self.show_note(note),
+            Ok(note) => {
+                self.show_note(note);
+                self.restore_cursor(id);
+            }
             Err(e) => self.toast(&format!("開けませんでした: {e}")),
         }
+    }
+
+    /// Puts the cursor where it was when the note was last left on this
+    /// device, and brings it into view.
+    fn restore_cursor(&self, id: &str) {
+        let buffer = &self.ui.buffer;
+        let Some((cursor, bound)) = Cursors::load(&config::cursors_file()).get(id, buffer.char_count()) else {
+            return;
+        };
+        buffer.select_range(&buffer.iter_at_offset(cursor), &buffer.iter_at_offset(bound));
+        // Scroll once the text is laid out.
+        let (view, mark) = (self.ui.view.clone(), buffer.get_insert());
+        glib::idle_add_local_once(move || view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5));
+    }
+
+    /// Saves where the cursor is in the open note.
+    fn remember_cursor(&self) {
+        let Some(id) = self.state.borrow().current.as_ref().map(|n| n.id()) else { return };
+        let buffer = &self.ui.buffer;
+        let cursor = buffer.iter_at_mark(&buffer.get_insert()).offset();
+        let bound = buffer.iter_at_mark(&buffer.selection_bound()).offset();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as i64);
+        let path = config::cursors_file();
+        let mut cursors = Cursors::load(&path);
+        cursors.set(&id, cursor, bound, now);
+        cursors.save(&path);
     }
 
     fn new_note(self: &Rc<Self>) {

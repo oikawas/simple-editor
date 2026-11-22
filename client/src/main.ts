@@ -4,6 +4,7 @@ import { EditorView, keymap, placeholder, drawSelection } from "@codemirror/view
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
+import { loadCursor, saveCursor } from "./cursors";
 import {
   diaryDate,
   diaryId,
@@ -314,10 +315,14 @@ async function selectNote(id: string, isNew = false): Promise<void> {
   }
 
   const undoManager = new Y.UndoManager(body);
+  // The note opens where the cursor was when it was last left on this device.
+  const text = body.toString();
+  const saved = isNew ? null : loadCursor(id, text.length);
   const view = new EditorView({
     parent: $("editor"),
     state: EditorState.create({
-      doc: body.toString(),
+      doc: text,
+      selection: saved ?? undefined,
       extensions: [
         keymap.of([...yUndoManagerKeymap, ...defaultKeymap]),
         drawSelection(),
@@ -355,6 +360,7 @@ async function selectNote(id: string, isNew = false): Promise<void> {
     note,
     view,
     dispose: () => {
+      rememberCursor();
       clearTimeout(touchTimer);
       doc.off("afterTransaction", onLocalChange);
       doc.off("update", onAnyChange);
@@ -384,7 +390,22 @@ async function selectNote(id: string, isNew = false): Promise<void> {
   onAnyChange();
   showEditor();
   if (isNew) view.focus();
+  // Bring the restored cursor into view once the editor is laid out.
+  if (saved) requestAnimationFrame(() => view.dispatch({ effects: EditorView.scrollIntoView(saved.head, { y: "center" }) }));
 }
+
+// Saves where the cursor is in the open note.
+function rememberCursor(): void {
+  if (!current) return;
+  const { anchor, head } = current.view.state.selection.main;
+  saveCursor(current.note.id, { anchor, head });
+}
+
+// The page may be closed or suspended without the note being closed.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") rememberCursor();
+});
+window.addEventListener("pagehide", rememberCursor);
 
 function closeCurrent(): void {
   if (!current) return;

@@ -28,6 +28,11 @@ fn config_dir() -> PathBuf {
     gtk::glib::user_config_dir().join("simple-editor")
 }
 
+/// Where the cursor was last left in each note on this device.
+pub fn cursors_file() -> PathBuf {
+    config_dir().join("cursors.json")
+}
+
 /// Where the core keeps notes on this device.
 pub fn data_dir() -> PathBuf {
     gtk::glib::user_data_dir().join("simple-editor")

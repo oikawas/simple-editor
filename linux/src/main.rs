@@ -1,5 +1,6 @@
 mod calendar;
 mod config;
+mod cursors;
 mod history;
 mod settings_dialog;
 mod window;

@@ -67,6 +67,10 @@ pub struct ClientConfig {
     /// worked is tried again after 1 second first.
     #[uniffi(default = None)]
     pub retry_interval_secs: Option<u32>,
+    /// This device's name, shown to other devices that have the same note
+    /// open; None to announce nothing.
+    #[uniffi(default = None)]
+    pub device_name: Option<String>,
 }
 
 /// Callbacks to the app. They arrive on a background thread.
@@ -77,6 +81,8 @@ pub trait ClientListener: Send + Sync {
     fn on_notes_changed(&self);
     /// An open note changed on another device; re-read it.
     fn on_note_changed(&self, id: String);
+    /// The other devices that have a note open changed: their names, sorted.
+    fn on_editors_changed(&self, id: String, names: Vec<String>);
 }
 
 struct Events(Arc<dyn ClientListener>);
@@ -90,6 +96,9 @@ impl SyncEvents for Events {
     }
     fn note_changed(&self, id: &str) {
         self.0.on_note_changed(id.to_owned());
+    }
+    fn editors_changed(&self, id: &str, names: Vec<String>) {
+        self.0.on_editors_changed(id.to_owned(), names);
     }
 }
 
@@ -115,6 +124,7 @@ impl Client {
                 ws_url: sync_url(&config.server_url),
                 token: config.device_token.clone(),
                 retry_interval: config.retry_interval_secs.map(|s| std::time::Duration::from_secs(s.into())),
+                device_name: config.device_name.clone().filter(|n| !n.trim().is_empty()),
             },
             store.clone(),
             Arc::new(Events(listener)),
@@ -151,6 +161,12 @@ impl Client {
         if let Some(doc) = self.open.lock().unwrap().remove(&id) {
             self.sync.close(&id, &doc);
         }
+    }
+
+    /// The note shown to the user, or None. Other devices that have the
+    /// same note open see this device's name as editing it.
+    pub fn set_active_note(&self, id: Option<String>) {
+        self.sync.set_active(id.as_deref());
     }
 
     /// The note list, newest first. Offline, the last fetched list is used.

@@ -26,6 +26,8 @@ enum Event {
     Status(SyncStatus),
     NotesChanged,
     NoteChanged(String),
+    /// The other devices editing a note (their names).
+    Editors(String, Vec<String>),
 }
 
 struct Listener(async_channel::Sender<Event>);
@@ -39,6 +41,9 @@ impl ClientListener for Listener {
     }
     fn on_note_changed(&self, id: String) {
         let _ = self.0.send_blocking(Event::NoteChanged(id));
+    }
+    fn on_editors_changed(&self, id: String, names: Vec<String>) {
+        let _ = self.0.send_blocking(Event::Editors(id, names));
     }
 }
 
@@ -64,6 +69,8 @@ struct State {
     mode: Mode,
     /// Full-text hits from the server for a query: note id -> excerpt.
     search: Option<(String, HashMap<String, String>)>,
+    /// Other devices editing each note, as the core last reported.
+    editors: HashMap<String, Vec<String>>,
 }
 
 pub struct Ui {
@@ -141,6 +148,7 @@ pub fn build(app: &adw::Application) -> Rc<App> {
             filter: Filter::All,
             mode,
             search: None,
+            editors: HashMap::new(),
         }),
         refresh_pending: Cell::new(None),
         search_pending: Cell::new(None),
@@ -260,7 +268,15 @@ fn build_ui(app: &adw::Application) -> Ui {
     tags_row.set_margin_top(6);
     tags_row.append(&tags_flow);
     tags_row.append(&tag_entry);
-    let dates = gtk::Label::builder().xalign(0.0).margin_start(12).margin_top(4).build();
+    // The status below the text: length, other devices editing, dates.
+    let dates = gtk::Label::builder()
+        .xalign(0.0)
+        .margin_start(12)
+        .margin_end(12)
+        .margin_top(5)
+        .margin_bottom(5)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .build();
     dates.add_css_class("dim-label");
     dates.add_css_class("caption");
 
@@ -283,8 +299,9 @@ fn build_ui(app: &adw::Application) -> Ui {
     let text_scroll = gtk::ScrolledWindow::builder().child(&view).vexpand(true).build();
     let editor = gtk::Box::new(gtk::Orientation::Vertical, 0);
     editor.append(&tags_row);
-    editor.append(&dates);
     editor.append(&text_scroll);
+    editor.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    editor.append(&dates);
 
     let empty = adw::StatusPage::builder()
         .icon_name("accessories-text-editor-symbolic")
@@ -447,8 +464,29 @@ fn connect_signals(app: &Rc<App>) {
         note.set_body(text.to_string());
         app.style_title_line();
         app.update_current_summary();
+        app.render_status();
     });
     app.ui.changed_handler.replace(Some(handler));
+}
+
+/// The length as people count it: characters as they appear (an emoji with
+/// modifiers, or a letter with combining marks, is one), without line breaks.
+fn count_characters(text: &str) -> usize {
+    use unicode_segmentation::UnicodeSegmentation;
+    text.graphemes(true).filter(|g| *g != "\n" && *g != "\r\n").count()
+}
+
+/// 1234567 -> "1,234,567".
+fn group_digits(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The span where `old` and `new` differ, in characters (GTK's offsets):
@@ -598,6 +636,7 @@ impl App {
             device_token: token,
             data_dir: config::data_dir().to_string_lossy().into_owned(),
             retry_interval_secs: None,
+            device_name: Some(settings.device_name.clone()),
         };
         match Client::new(config, Arc::new(Listener(tx))) {
             Ok(client) => {
@@ -647,6 +686,20 @@ impl App {
                 if let Some(note) = current.filter(|n| n.id() == id) {
                     self.show_remote_body(&note);
                     self.note_meta_changed();
+                }
+            }
+            Event::Editors(id, names) => {
+                let is_current = {
+                    let mut st = self.state.borrow_mut();
+                    if names.is_empty() {
+                        st.editors.remove(&id);
+                    } else {
+                        st.editors.insert(id.clone(), names);
+                    }
+                    st.current.as_ref().is_some_and(|n| n.id() == id)
+                };
+                if is_current {
+                    self.render_status();
                 }
             }
         }
@@ -960,6 +1013,8 @@ impl App {
             (st.client.clone(), st.current.take())
         };
         if let (Some(client), Some(note)) = (client, note) {
+            // A note with unsent changes stays open in the core, so say so apart.
+            client.set_active_note(None);
             client.close_note(note.id());
         }
         self.set_buffer_text("");
@@ -1038,7 +1093,15 @@ impl App {
     }
 
     fn show_note(self: &Rc<Self>, note: Arc<Note>) {
-        self.state.borrow_mut().current = Some(note.clone());
+        let client = {
+            let mut st = self.state.borrow_mut();
+            st.current = Some(note.clone());
+            st.client.clone()
+        };
+        // Other devices with this note open see this one as editing it.
+        if let Some(client) = client {
+            client.set_active_note(Some(note.id()));
+        }
         self.set_buffer_text(&note.body());
         self.show_note_ui(true);
         self.note_meta_changed();
@@ -1130,6 +1193,38 @@ impl App {
         self.render_list();
     }
 
+    /// The status below the text: the length, the other devices editing
+    /// the note, and its dates.
+    fn render_status(&self) {
+        let (note, editors) = {
+            let st = self.state.borrow();
+            let Some(note) = st.current.clone() else { return };
+            let editors = st.editors.get(&note.id()).cloned().unwrap_or_default();
+            (note, editors)
+        };
+        let buffer = &self.ui.buffer;
+        let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+        let mut parts = vec![format!("{} 文字", group_digits(count_characters(&text)))];
+        if !editors.is_empty() {
+            parts.push(format!("編集中: {}", editors.join("、")));
+        }
+        let summary = note.summary();
+        match diary_date(summary.id.clone()) {
+            Some(date) => {
+                parts.push(format!("{}の日記", format_diary_date(&date)));
+                // An entry not written yet has no times.
+                if summary.updated_at > 0 {
+                    parts.push(format!("更新: {}", format_date(summary.updated_at)));
+                }
+            }
+            None => {
+                parts.push(format!("作成: {}", format_date(summary.created_at)));
+                parts.push(format!("更新: {}", format_date(summary.updated_at)));
+            }
+        }
+        self.ui.dates.set_label(&parts.join("　"));
+    }
+
     /// Re-renders tags, dates, and the trash button for the open note.
     pub fn note_meta_changed(self: &Rc<Self>) {
         let Some(note) = self.state.borrow().current.clone() else { return };
@@ -1152,21 +1247,7 @@ impl App {
             self.ui.tags_flow.append(&chip);
         }
         let summary = note.summary();
-        match diary_date(summary.id.clone()) {
-            Some(date) => {
-                let updated = if summary.updated_at > 0 {
-                    format!("　更新: {}", format_date(summary.updated_at))
-                } else {
-                    String::new()
-                };
-                self.ui.dates.set_label(&format!("{}の日記{updated}", format_diary_date(&date)));
-            }
-            None => self.ui.dates.set_label(&format!(
-                "作成: {}　更新: {}",
-                format_date(summary.created_at),
-                format_date(summary.updated_at)
-            )),
-        }
+        self.render_status();
         // Diary entries do not go to the trash.
         self.ui.trash_button.set_visible(diary_date(summary.id.clone()).is_none());
         let deleted = note.is_deleted();
@@ -1228,6 +1309,15 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn counts_characters_without_line_breaks() {
+        assert_eq!(super::count_characters(""), 0);
+        assert_eq!(super::count_characters("abc\nあいう\n👍🏽 e\u{301}\r\nx"), 10);
+        assert_eq!(super::group_digits(7), "7");
+        assert_eq!(super::group_digits(1234), "1,234");
+        assert_eq!(super::group_digits(1234567), "1,234,567");
+    }
+
     #[test]
     fn char_span_counts_characters() {
         assert_eq!(super::char_span("a😀b", "a😀Xb"), Some((2, 0, "X".into())));

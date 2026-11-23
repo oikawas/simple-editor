@@ -19,10 +19,6 @@ struct EditorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             tagBar
-            Text(datesLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
             NoteTextView(
                 note: note,
                 font: EditorFont.platformFont(family: fontFamily, size: fontSize),
@@ -36,6 +32,7 @@ struct EditorView: View {
                 ),
                 onEdit: { model.currentNoteChanged() }
             )
+            statusBar
         }
         .navigationTitle(note.diaryDate.map(Diary.format) ?? (note.title.isEmpty ? "（無題）" : note.title))
         #if os(iOS)
@@ -72,13 +69,35 @@ struct EditorView: View {
         }
     }
 
-    private var datesLine: String {
+    /// Below the text: the length, other devices editing the note, and dates.
+    private var statusBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Text(statusLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+        }
+        .background(.bar)
+    }
+
+    private var statusLine: String {
+        var parts = ["\(note.characterCount.formatted()) 文字"]
+        if !note.editors.isEmpty { parts.append("編集中: " + note.editors.joined(separator: "、")) }
         let created = note.createdAt.formatted(date: .numeric, time: .shortened)
         let updated = note.updatedAt.formatted(date: .numeric, time: .shortened)
-        guard let date = note.diaryDate else { return "作成: \(created)　更新: \(updated)" }
-        // An entry not written yet has no times.
-        let written = note.updatedAt.timeIntervalSince1970 > 0
-        return "\(Diary.format(date))の日記" + (written ? "　更新: \(updated)" : "")
+        if let date = note.diaryDate {
+            parts.append("\(Diary.format(date))の日記")
+            // An entry not written yet has no times.
+            if note.updatedAt.timeIntervalSince1970 > 0 { parts.append("更新: \(updated)") }
+        } else {
+            parts += ["作成: \(created)", "更新: \(updated)"]
+        }
+        return parts.joined(separator: "　")
     }
 
     private var tagBar: some View {

@@ -20,6 +20,7 @@ enum CoreEvent: Sendable {
     case status(SyncStatus)
     case notesChanged
     case noteChanged(String)
+    case editors(String, [String])
 }
 
 final class Listener: ClientListener, @unchecked Sendable {
@@ -32,6 +33,7 @@ final class Listener: ClientListener, @unchecked Sendable {
     func onStatus(status: SyncStatus) { continuation.yield(.status(status)) }
     func onNotesChanged() { continuation.yield(.notesChanged) }
     func onNoteChanged(id: String) { continuation.yield(.noteChanged(id)) }
+    func onEditorsChanged(id: String, names: [String]) { continuation.yield(.editors(id, names)) }
 }
 
 /// Everything the app shows and does, independent of the UI toolkit.
@@ -69,6 +71,8 @@ public final class AppModel {
     @ObservationIgnored private let tokens: TokenStore
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let cursors: CursorMemory
+    /// Other devices editing each note, as the core last reported.
+    @ObservationIgnored private var editorsByNote: [String: [String]] = [:]
     @ObservationIgnored private let dataDirectory: URL
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -119,7 +123,7 @@ public final class AppModel {
         let (stream, continuation) = AsyncStream.makeStream(of: CoreEvent.self)
         let config = ClientConfig(
             serverUrl: settings.serverURL, deviceToken: token, dataDir: dataDirectory.path,
-            retryIntervalSecs: Self.retryIntervalSeconds
+            retryIntervalSecs: Self.retryIntervalSeconds, deviceName: settings.deviceName
         )
         do {
             let client = try Client(config: config, listener: Listener(continuation))
@@ -190,6 +194,9 @@ public final class AppModel {
                 current.applyRemote()
                 updateListEntry(current.summary)
             }
+        case .editors(let id, let names):
+            editorsByNote[id] = names.isEmpty ? nil : names
+            if let current, current.id == id { current.editors = names }
         }
     }
 
@@ -313,7 +320,7 @@ public final class AppModel {
             let open = OpenNote(note: try client.openNote(id: id))
             // The note opens where the cursor was when it was last left on this device.
             if let saved = cursors.load(id: id, length: open.text.utf16.count) { open.selection = saved }
-            current = open
+            show(open)
         } catch {
             errorMessage = Self.describe(error)
         }
@@ -328,7 +335,7 @@ public final class AppModel {
         do {
             let open = OpenNote(note: try client.createNote())
             if case .tag(let tag) = filter { open.addTag(tag) }
-            current = open
+            show(open)
             updateListEntry(open.summary)
             return open
         } catch {
@@ -384,9 +391,18 @@ public final class AppModel {
         currentNoteChanged()
     }
 
+    /// Shows a note, and tells other devices this one is editing it.
+    private func show(_ open: OpenNote) {
+        open.editors = editorsByNote[open.id] ?? []
+        current = open
+        client?.setActiveNote(id: open.id)
+    }
+
     public func closeCurrent() {
         guard let current else { return }
         rememberCursor()
+        // A note with unsent changes stays open in the core, so say so apart.
+        client?.setActiveNote(id: nil)
         client?.closeNote(id: current.id)
         self.current = nil
     }

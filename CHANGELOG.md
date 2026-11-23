@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A status area below the text: the length (without line breaks), the other devices showing the note ("editing"), and the creation and update times, which moved here from above the text (every app)
+- Presence (Yjs awareness) in the native apps' shared core, between devices showing the same note; the web app and the native apps see each other. API: `Client.set_active_note`, `ClientListener.on_editors_changed`, `ClientConfig.device_name`
 - Ruled lines in the display settings (none, solid, dashed, or dotted): a thin line 4 pixels below the text's baseline in every row on screen, wrapped rows included. In the web, Linux, macOS, and iOS apps
 - Settings to show full-width and half-width spaces as dotted boxes and line breaks as a symbol (↵, an arrow one half-width character wide), each on or off. They are only drawn and not part of the text
 - The build number at the bottom left of the app. It goes up by one with every build of the web, Linux, macOS, or iOS app (`scripts/next-build-number.sh`, counted in `.build-number` at the top of the repository)

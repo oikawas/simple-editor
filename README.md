@@ -224,6 +224,8 @@ npm test                                             # server integration tests
 npm run build -w server && (cd core && cargo test)   # core tests (they start the real server)
 ```
 
+Every build raises the build number shown at the bottom left of the app by one. The count is kept in `.build-number` at the top of the repository (not under version control).
+
 See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 
 ## Possible next steps

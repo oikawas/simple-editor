@@ -11,6 +11,10 @@ struct EditorView: View {
     @AppStorage(EditorFont.familyKey) private var fontFamily = ""
     @AppStorage(EditorFont.sizeKey) private var fontSize = EditorFont.defaultSize
     @AppStorage(EditorFont.lineHeightKey) private var lineHeight = EditorFont.defaultLineHeight
+    @AppStorage(TextDecorations.ruledLinesKey) private var ruledLines = RuledLineStyle.none
+    @AppStorage(TextDecorations.fullWidthSpacesKey) private var fullWidthSpaces = false
+    @AppStorage(TextDecorations.halfWidthSpacesKey) private var halfWidthSpaces = false
+    @AppStorage(TextDecorations.lineBreaksKey) private var lineBreaks = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -24,6 +28,12 @@ struct EditorView: View {
                 font: EditorFont.platformFont(family: fontFamily, size: fontSize),
                 lineHeight: lineHeight,
                 highlight: model.searchText,
+                decorations: TextDecorations(
+                    ruledLines: ruledLines,
+                    fullWidthSpaces: fullWidthSpaces,
+                    halfWidthSpaces: halfWidthSpaces,
+                    lineBreaks: lineBreaks
+                ),
                 onEdit: { model.currentNoteChanged() }
             )
         }

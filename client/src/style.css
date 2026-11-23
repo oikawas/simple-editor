@@ -176,6 +176,40 @@ body.mode-diary #tag-filter { display: none; }
 #editor .cm-content { padding: 0 6px; caret-color: var(--fg); }
 #editor .cm-line:first-child { font-weight: 700; font-size: 1.2em; }
 #editor .cm-placeholder { color: var(--faint); }
+
+/* Ruled lines: a rule on the baseline of every row, wrapped rows included
+   (1lh is the line's own height, so the larger title line works too). The
+   style comes from the display settings (applyDisplay). */
+:root { --rule: #aeaeb6; }
+@media (prefers-color-scheme: dark) { :root { --rule: #5e5e66; } }
+:root[data-ruled-lines] #editor .cm-line { position: relative; }
+:root[data-ruled-lines] #editor .cm-line::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  /* 4px below the baseline: half a line down, then the font's own offset
+     (--baseline-shift, measured by measureBaseline in markers.ts). */
+  --rule-at: calc(0.5lh + var(--baseline-shift, 0.3) * 1em + 4px);
+  background: repeating-linear-gradient(to bottom,
+    transparent 0 var(--rule-at),
+    var(--rule) var(--rule-at) calc(var(--rule-at) + 0.5px),
+    transparent calc(var(--rule-at) + 0.5px) 1lh);
+}
+:root[data-ruled-lines="dashed"] #editor .cm-line::before {
+  mask-image: repeating-linear-gradient(to right, #000 0 6px, transparent 6px 10px);
+}
+:root[data-ruled-lines="dotted"] #editor .cm-line::before {
+  mask-image: repeating-linear-gradient(to right, #000 0 1.5px, transparent 1.5px 4px);
+}
+
+/* Spaces and line breaks (markers.ts); hidden unless turned on. */
+:root[data-full-width-spaces] #editor .cm-full-space { outline: 1px dotted var(--faint); outline-offset: -2px; }
+:root[data-half-width-spaces] #editor .cm-half-space { outline: 1px dotted var(--faint); outline-offset: -1px; }
+#editor .cm-line-break { display: none; color: var(--faint); pointer-events: none; user-select: none; }
+:root[data-line-breaks] #editor .cm-line-break { display: inline; }
+/* The arrow's box is 1em tall with the baseline 0.8em down. */
+#editor .cm-line-break svg { vertical-align: -0.2em; }
+
+/* The build number, small at the bottom left. */
+.build-info { padding: 4px 14px calc(6px + env(safe-area-inset-bottom)); font-size: 10.5px; color: var(--faint); }
 body.is-diary #trash-note { display: none; }
 body.is-diary #editor .cm-line:first-child { font-weight: inherit; font-size: inherit; }
 /* Icons inside buttons sit centered next to their labels. */
@@ -194,8 +228,10 @@ body.mode-diary .empty .for-diary { display: inline; }
 /* CodeMirror draws its own caret and selection and does not follow the
    page's dark mode; use the app's colors so they show in both themes. */
 #editor .cm-cursor, #editor .cm-dropCursor { border-left: 2px solid var(--fg); }
-#editor .cm-selectionBackground { background: var(--accent-soft) !important; }
-#editor .cm-focused .cm-selectionBackground { background: var(--accent-soft) !important; }
+/* The selection is drawn as tall as the text (selection.ts), not CodeMirror's
+   whole-line one. */
+#editor .cm-selectionLayer { display: none; }
+#editor .cm-bandSelection { background: var(--accent-soft); }
 .cm-ySelectionInfo { font-family: inherit; font-size: 11px; }
 
 /* ---- dialogs ---- */
@@ -212,6 +248,8 @@ dialog input, dialog select {
   background: var(--fill); color: var(--fg); outline: none;
 }
 dialog input:focus, dialog select:focus { box-shadow: 0 0 0 1.5px var(--accent); }
+dialog label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+dialog label.check input { display: inline; width: auto; margin: 0; }
 dialog .hint { font-size: 12px; color: var(--faint); margin: 4px 0 0; }
 dialog .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 20px; }
 dialog .row button:not(.primary) { background: var(--fill); }

@@ -23,6 +23,8 @@ struct NoteTextView {
     let lineHeight: Double
     /// Search words to highlight in the text (macOS).
     var highlight: String = ""
+    /// Ruled lines and marks for spaces and line breaks.
+    var decorations = TextDecorations()
     let onEdit: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -62,17 +64,15 @@ struct NoteTextView {
         /// next. Changing the text's attributes would break a composition, so
         /// that waits until it is committed.
         func applyStyle(force: Bool = false) {
-            guard let textView, !composing else { return }
+            guard let textView else { return }
+            // Only drawn, never part of the text, so this is safe while composing.
+            (textView.layoutManager as? DecoratingLayoutManager)?.decorations = parent.decorations
+            guard !composing else { return }
             let font = parent.font
             if !force, case let (applied, height)? = appliedStyle, applied == font, height == parent.lineHeight { return }
             appliedStyle = (font, parent.lineHeight)
-            #if os(macOS)
-            let natural = NSLayoutManager().defaultLineHeight(for: font)
-            #else
-            let natural = font.lineHeight
-            #endif
-            let style = NSMutableParagraphStyle()
-            style.lineSpacing = max(0, font.pointSize * parent.lineHeight - natural)
+            let style = paragraphStyle(for: font)
+            bodyParagraph = style
             isApplying = true
             defer { isApplying = false }
             #if os(macOS)
@@ -95,6 +95,27 @@ struct NoteTextView {
             #endif
         }
 
+        /// The paragraph style that gives every line the same height: the font
+        /// size times the line height, but not less than the font's natural
+        /// line height. Without a fixed height, a line holding Japanese (set
+        /// in a fallback font with taller metrics) would be taller than an
+        /// empty line or one of Latin letters.
+        private func paragraphStyle(for font: PlatformFont) -> NSParagraphStyle {
+            #if os(macOS)
+            let natural = NSLayoutManager().defaultLineHeight(for: font)
+            #else
+            let natural = font.lineHeight
+            #endif
+            let height = max(font.pointSize * parent.lineHeight, natural).rounded()
+            let style = NSMutableParagraphStyle()
+            style.minimumLineHeight = height
+            style.maximumLineHeight = height
+            return style
+        }
+
+        /// The paragraph style of the body text.
+        private var bodyParagraph = NSParagraphStyle()
+
         #if os(macOS)
         private var titleFont: NSFont {
             let font = parent.font
@@ -116,9 +137,12 @@ struct NoteTextView {
             isApplying = true
             defer { isApplying = wasApplying }
             storage.beginEditing()
-            storage.addAttribute(.font, value: parent.font, range: reset)
+            storage.addAttributes([.font: parent.font, .paragraphStyle: bodyParagraph], range: reset)
             if hasTitle, titleEnd > 0 {
                 storage.addAttribute(.font, value: titleFont, range: NSRange(location: 0, length: titleEnd))
+                // The title's line is as much taller as its type.
+                let paragraph = NSRange(location: 0, length: min(text.length, titleEnd + 1))
+                storage.addAttribute(.paragraphStyle, value: paragraphStyle(for: titleFont), range: paragraph)
             }
             storage.endEditing()
             styledTitleEnd = titleEnd
@@ -130,6 +154,7 @@ struct NoteTextView {
             guard let textView, !composing else { return }
             let inTitle = parent.note.diaryDate == nil && textView.selectedRange().location <= styledTitleEnd
             textView.typingAttributes[.font] = inTitle ? titleFont : parent.font
+            textView.typingAttributes[.paragraphStyle] = inTitle ? paragraphStyle(for: titleFont) : bodyParagraph
         }
 
         /// Marks where the searched words appear. The marks are drawn over the
@@ -271,9 +296,24 @@ struct NoteTextView {
 #if os(macOS)
 extension NoteTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
+        // TextKit 1, with a layout manager that draws the ruled lines and
+        // the marks for spaces and line breaks behind the text.
+        let storage = NSTextStorage()
+        let layout = DecoratingLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(containerSize: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let textView = NSTextView(frame: .zero, textContainer: container)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
-        let textView = scrollView.documentView as! NSTextView
+        scrollView.documentView = textView
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
@@ -322,8 +362,15 @@ extension NoteTextView: UIViewRepresentable {
         // TextKit 1. With TextKit 2, tapping blank space in a run of empty
         // lines could put the caret on the last line and scroll there (seen
         // when the iOS app runs on a Mac): its estimated line heights put the
-        // tap below the end of the text.
-        let textView = UITextView(usingTextLayoutManager: false)
+        // tap below the end of the text. The layout manager also draws the
+        // ruled lines and the marks for spaces and line breaks.
+        let storage = NSTextStorage()
+        let layout = DecoratingLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let textView = BandTextView(frame: .zero, textContainer: container)
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.textColor = .label
@@ -347,6 +394,62 @@ extension NoteTextView: UIViewRepresentable {
         context.coordinator.applyStyle()
         context.coordinator.applyExternalChange()
     }
+}
+
+/// A text view whose caret and selection cover the text's band of each line
+/// (the font's height, see DecoratingLayoutManager.textBand) instead of the
+/// whole line, which is taller with the line height.
+final class BandTextView: UITextView {
+    private var decorating: DecoratingLayoutManager? { layoutManager as? DecoratingLayoutManager }
+
+    /// The text's band of the line holding the character at `index`, in
+    /// this view's coordinates.
+    private func band(atCharacter index: Int) -> CGRect? {
+        guard let layout = decorating else { return nil }
+        let length = textStorage.length
+        let used: CGRect
+        if index >= length, !layout.extraLineFragmentRect.isEmpty {
+            used = layout.extraLineFragmentUsedRect
+        } else if length > 0 {
+            used = layout.lineFragmentUsedRect(forGlyphAt: layout.glyphIndexForCharacter(at: min(index, length - 1)), effectiveRange: nil)
+        } else {
+            return nil
+        }
+        return used.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
+    }
+
+    override func caretRect(for position: UITextPosition) -> CGRect {
+        let caret = super.caretRect(for: position)
+        guard let band = band(atCharacter: offset(from: beginningOfDocument, to: position)) else { return caret }
+        return CGRect(x: caret.minX, y: band.minY, width: caret.width, height: band.height)
+    }
+
+    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
+        super.selectionRects(for: range).map { rect in
+            guard let layout = decorating, let container = layout.textContainers.first, !rect.rect.isEmpty else { return rect }
+            let point = CGPoint(x: rect.rect.minX - textContainerInset.left, y: rect.rect.midY - textContainerInset.top)
+            let glyph = layout.glyphIndex(for: point, in: container)
+            guard let band = band(atCharacter: layout.characterIndexForGlyph(at: glyph)) else { return rect }
+            return BandSelectionRect(base: rect, rect: CGRect(x: rect.rect.minX, y: band.minY, width: rect.rect.width, height: band.height))
+        }
+    }
+}
+
+/// A selection rect moved to the text's band.
+private final class BandSelectionRect: UITextSelectionRect {
+    private let base: UITextSelectionRect
+    private let bandRect: CGRect
+
+    init(base: UITextSelectionRect, rect: CGRect) {
+        self.base = base
+        self.bandRect = rect
+    }
+
+    override var rect: CGRect { bandRect }
+    override var writingDirection: NSWritingDirection { base.writingDirection }
+    override var containsStart: Bool { base.containsStart }
+    override var containsEnd: Bool { base.containsEnd }
+    override var isVertical: Bool { base.isVertical }
 }
 
 extension NoteTextView.Coordinator: UITextViewDelegate {

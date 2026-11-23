@@ -59,6 +59,15 @@ struct DisplaySettingsSection: View {
     @AppStorage(EditorFont.familyKey) private var family = ""
     @AppStorage(EditorFont.sizeKey) private var size = EditorFont.defaultSize
     @AppStorage(EditorFont.lineHeightKey) private var lineHeight = EditorFont.defaultLineHeight
+    @AppStorage(TextDecorations.ruledLinesKey) private var ruledLines = RuledLineStyle.none
+    @AppStorage(TextDecorations.fullWidthSpacesKey) private var fullWidthSpaces = false
+    @AppStorage(TextDecorations.halfWidthSpacesKey) private var halfWidthSpaces = false
+    @AppStorage(TextDecorations.lineBreaksKey) private var lineBreaks = false
+
+    private var isDefault: Bool {
+        family.isEmpty && size == EditorFont.defaultSize && lineHeight == EditorFont.defaultLineHeight
+            && ruledLines == .none && !fullWidthSpaces && !halfWidthSpaces && !lineBreaks
+    }
 
     var body: some View {
         Section {
@@ -80,16 +89,28 @@ struct DisplaySettingsSection: View {
             Text("あいうえお 漢字 ABC abc 123")
                 .font(EditorFont.font(family: family, size: size))
                 .lineLimit(1)
+            Picker("罫線", selection: $ruledLines) {
+                ForEach(RuledLineStyle.allCases) { style in
+                    Text(style.label).tag(style)
+                }
+            }
+            Toggle("全角スペースを点線の四角で表示", isOn: $fullWidthSpaces)
+            Toggle("半角スペースを点線の四角で表示", isOn: $halfWidthSpaces)
+            Toggle("改行を記号（↵）で表示", isOn: $lineBreaks)
             Button("標準に戻す") {
                 family = ""
                 size = EditorFont.defaultSize
                 lineHeight = EditorFont.defaultLineHeight
+                ruledLines = .none
+                fullWidthSpaces = false
+                halfWidthSpaces = false
+                lineBreaks = false
             }
-            .disabled(family.isEmpty && size == EditorFont.defaultSize && lineHeight == EditorFont.defaultLineHeight)
+            .disabled(isDefault)
         } header: {
             Text("表示")
         } footer: {
-            Text("本文の書体と大きさ、行間（文字の大きさに対する行の高さ）です。この端末だけの設定で、すぐに反映されます。")
+            Text("本文の書体と大きさ、行間（文字の大きさに対する行の高さ）、罫線、空白と改行の記号です。この端末だけの設定で、すぐに反映されます。")
         }
     }
 }

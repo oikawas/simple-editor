@@ -6,8 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Ruled lines in the display settings (none, solid, dashed, or dotted): a thin line 4 pixels below the text's baseline in every row on screen, wrapped rows included. In the web, Linux, macOS, and iOS apps
+- Settings to show full-width and half-width spaces as dotted boxes and line breaks as a symbol (↵, an arrow one half-width character wide), each on or off. They are only drawn and not part of the text
+- The build number at the bottom left of the app. It goes up by one with every build of the web, Linux, macOS, or iOS app (`scripts/next-build-number.sh`, counted in `.build-number` at the top of the repository)
+
 ### Changed
 
+- In the native apps (Linux, macOS, iOS), every line now has the same fixed height (font size times line height). Lines of Japanese (set in a fallback font) used to differ in height from empty lines and lines of Latin letters
+- The caret and the selection are now as tall as the text rather than the line (web, Linux, macOS, iOS). The macOS and iOS apps center the text in its line
+- The macOS app's text view now uses TextKit 1, like the iOS app, to draw the ruled lines and marks
+- In the macOS app's list toolbar, the settings button now stands on its own instead of being in the "その他" (More) menu. Exporting everything moved to File > "すべて書き出し (.zip)…" (⇧⌘E) in the menu bar and is no longer in the window
 - When the server's certificate cannot be verified, the native apps (Linux, macOS, iOS) now say so and explain how to install and trust the root certificate on the device (they used to say only that the server could not be reached). The web app's message for a failed connection now also suggests checking the certificate
 - The shared core's `CoreError` has a new `Certificate` case for a certificate that could not be verified
 

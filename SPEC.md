@@ -94,7 +94,7 @@ There are two kinds of client:
 ### 3.9 Export and import
 
 - **One note**: the ".txt" button in the editor saves the current note's body as a text file. It is generated on the device, so it works offline
-- **All notes**: "すべて書き出し" (Export all) in the settings downloads a zip containing:
+- **All notes**: "すべて書き出し" (Export all) downloads a zip (in the settings on the web and Linux, under "その他" (More) in the list on iOS, and File > "すべて書き出し (.zip)…" (⇧⌘E) in the menu bar on macOS) containing:
   - `<title>.txt` for each note (body only, UTF-8), with the file time set to the note's update time
   - Diary entries as `diary/<year>/<month>/<date>.txt` (for example `diary/2024/01/2024-01-02.txt`); days with an empty body are left out
   - `notes.json` with each note's file name, ID, title, tags, creation time, and update time (ISO 8601), plus the date (`diary`) for diary entries
@@ -150,7 +150,17 @@ There are two kinds of client:
 - Display in the settings changes how the text looks, per device. It is not stored on the server and does not affect other devices. Changes apply at once
 - Web app: the text's font size (12 to 28, 15 by default) and line height (1.2 to 2.4, 1.6 by default), kept in the browser's localStorage
 - Native apps: the text's typeface (any installed font), size, and line height (1.0 to 3.0, 1.2 by default). "Reset" returns to the system default
-- The line height is the height of a line as a multiple of the font size
+- The line height is the height of a line as a multiple of the font size. Every line gets this fixed height (font size times line height), whether empty, Japanese, or Latin: Japanese is set in a fallback font, and leaving the height to each font would make lines differ. The title line is taller in proportion to its size
+- The caret and the selection are as tall as the text (the font's ascent to descent), not the line. A selected line break fills from the end of its line to the right edge at the same height
+  - macOS and iOS: the text is centered in its line. The layout manager's delegate (`DecoratingLayoutManager`) sets each line's text band, which macOS uses for the caret and selection as is (the selection fill is narrowed per line in `fillBackgroundRectArray`); on iOS the text view's `caretRect(for:)` and `selectionRects(for:)` return that band
+  - Web: CodeMirror's caret is already as tall as the text. Its whole-line selection is hidden, and a layer of our own fills the boxes of the selected text, which the browser reports at the font's height (`client/src/selection.ts`)
+  - Linux: GTK's caret is already as tall as the text. GTK's selection fill is made transparent with CSS, and a band as tall as the text is drawn in the layer below the text
+- In every app: **ruled lines** (none, solid, dashed, or dotted; none by default), and whether **full-width spaces** and **half-width spaces** are shown as dotted boxes and **line breaks** as a symbol (↵) (each on or off; off by default)
+  - The line break symbol is an arrow drawn with lines, as wide as one half-width character (the same shape in every app)
+  - A thin rule (0.5 points), in a light shade of the text color, is drawn 4 pixels (4 points on macOS and iOS) below the text's baseline in every row on screen, wrapped rows included, and on the empty last line too
+  - Finding the baseline: the web app computes it in CSS from a value measured once with the editor's font (`--baseline-shift`), macOS and iOS take it from the glyph positions of each row, and Linux lays out each row's text with Pango (GTK does not report baselines)
+  - The rules and marks are only drawn and are not part of the text: copying, saving, syncing, and exporting are unchanged
+  - The web app draws them with CSS (a gradient repeating every `1lh` of each line) and CodeMirror decorations, macOS and iOS in the background drawing of a TextKit 1 `NSLayoutManager`, and Linux in GtkTextView's `snapshot_layer` (the layer below the text)
 
 ### 3.13 Diary
 
@@ -164,6 +174,14 @@ There are two kinds of client:
 - Entries can have tags and use the edit history and restore. Filtering by tag applies to notes only
 - Entries do not go to the trash. To remove one, delete its text (the edit history can bring it back)
 - Search (3.7) covers notes and diary entries alike and finds both from either tab. Entries in the results are labeled "日記" (Diary); choosing one opens that day in the diary tab
+
+### 3.14 Build number
+
+- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42"
+- It goes up by one with every build of the web, Linux, macOS, or iOS app. `scripts/next-build-number.sh` keeps the count in `.build-number` at the top of the repository (not under version control). Builds running at the same time never get the same number
+  - The web app takes one per production build (`vite build`; the dev server shows "dev"), the Linux app on every build of it such as `cargo build` (`linux/build.rs`), and the macOS and iOS apps on every Xcode build (the "Build number" build phase writes `apple/Generated/BuildInfo.swift`)
+  - The count is per checkout of the repository. A Docker build on the server takes the number after the host's `.build-number` if there is one, but does not advance the host's count
+  - It is separate from the app version (`MARKETING_VERSION` and the like) and is not meant to identify releases
 
 ## 4. Architecture
 
@@ -250,10 +268,11 @@ There are two kinds of client:
 - The shared core is used through Swift bindings generated by UniFFI. It is built for macOS (Apple silicon and Intel), iOS, and the iOS simulator, and packed as an XCFramework (`apple/build-xcframework.sh`)
 - UI-independent state (registration, sync status, the list and search, the open note, devices, history, export) lives in the Swift package `SimpleEditorModel`. It also builds and tests on Linux, and its tests drive two devices against a real server
 - A split view (switching between list and editor on iPhone). Above the list are the tag filter and trash, below it the sync status. Above the editor are the tags and the creation and update times. The toolbar has history, export as text, and move to (or out of) the trash
+- The list's toolbar: on macOS, a settings (gear) button of its own, with exporting everything in the File menu of the menu bar; on iOS, a "その他" (More) menu with the settings, exporting everything, and importing from a pomera
 - Display in the settings sets the editor's typeface (any installed font, or the system font), size, and line height (applied as the paragraph style's line spacing), kept per device in UserDefaults and applied at once
 - In the list, searched words are highlighted in titles and excerpts (section 3.7)
 - In the macOS app, the first line (the title) is shown bold and 1.2 times as large (as in the web and Linux apps; not in diary entries). While searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
-- The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). The iOS `UITextView` uses TextKit 1: with TextKit 2, tapping blank space in a run of empty lines could put the caret on the last line, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
+- The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). Both use TextKit 1, with an `NSLayoutManager` that draws the ruled lines and the marks for spaces and line breaks (section 3.12). On iOS, TextKit 2 could also put the caret on the last line when blank space in a run of empty lines was tapped, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL, device name, and the last cursor position of each note in UserDefaults; notes in the app's data (Application Support)
@@ -303,6 +322,7 @@ The journal mode is WAL.
 | localStorage `simple-editor:notes` | Cached list |
 | localStorage `simple-editor:pending` | IDs of notes with unsent changes |
 | localStorage `simple-editor:cursors` | The last cursor position of each note (section 3.1) |
+| localStorage `simple-editor:display` | Display settings (section 3.12) |
 
 ## 6. Sync flow
 

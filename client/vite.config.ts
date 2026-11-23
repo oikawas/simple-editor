@@ -1,7 +1,16 @@
+import { execFileSync } from "node:child_process";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+// Each production build takes the next build number (scripts/next-build-number.sh).
+function buildNumber(command: string): string {
+  if (command !== "build") return "dev";
+  const script = new URL("../scripts/next-build-number.sh", import.meta.url).pathname;
+  return execFileSync("sh", [script], { encoding: "utf8" }).trim();
+}
+
+export default defineConfig(({ command }) => ({
+  define: { __BUILD_NUMBER__: JSON.stringify(buildNumber(command)) },
   server: {
     // During development, forward API and sync traffic to the local server.
     proxy: {
@@ -31,4 +40,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));

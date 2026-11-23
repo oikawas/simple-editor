@@ -60,6 +60,13 @@ struct SimpleEditorApp: App {
                     .keyboardShortcut("n")
                     .disabled(model.phase != .ready)
             }
+            CommandGroup(replacing: .importExport) {
+                Button("すべて書き出し (.zip)…") {
+                    NotificationCenter.default.post(name: .exportAllRequested, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(model.phase != .ready)
+            }
         }
         #endif
     }

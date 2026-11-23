@@ -17,3 +17,7 @@ apple/*.xcodeproj/
 # Local material that is not shared through git (handoff notes and the like)
 /no-git-sync/
 CLAUDE.local.md
+# Build counter of scripts/next-build-number.sh
+/.build-number
+/.build-number.lock/
+apple/Generated/

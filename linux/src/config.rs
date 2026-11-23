@@ -66,6 +66,31 @@ pub fn cursors_file() -> PathBuf {
     config_dir().join("cursors.json")
 }
 
+/// The note open on this device when the app was last used, reopened at launch.
+fn last_note_file() -> PathBuf {
+    config_dir().join("last-note")
+}
+
+pub fn load_last_note() -> Option<String> {
+    let id = std::fs::read_to_string(last_note_file()).ok()?;
+    let id = id.trim();
+    (!id.is_empty()).then(|| id.to_owned())
+}
+
+/// Remembers the open note, or forgets it with `None`.
+pub fn save_last_note(id: Option<&str>) {
+    let path = last_note_file();
+    match id {
+        Some(id) => {
+            let _ = std::fs::create_dir_all(config_dir());
+            let _ = std::fs::write(path, id);
+        }
+        None => {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 /// Where the core keeps notes on this device.
 pub fn data_dir() -> PathBuf {
     gtk::glib::user_data_dir().join("simple-editor")

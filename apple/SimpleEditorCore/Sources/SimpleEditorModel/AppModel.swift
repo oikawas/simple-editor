@@ -77,7 +77,10 @@ public final class AppModel {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var reopenedLastNote = false
     private static let modeKey = "sidebarMode"
+    /// The note open on this device when the app was last used, reopened at launch.
+    static let lastNoteKey = "simple-editor.lastNote"
     /// Seconds between reconnection attempts while the server stays out of
     /// reach. A dropped connection is first retried after 1 second; asking to
     /// refresh, the network coming back, or returning to the app retries at once.
@@ -136,6 +139,7 @@ public final class AppModel {
                 }
             }
             scheduleRefresh()
+            reopenLastNote()
         } catch {
             errorMessage = Self.describe(error)
             phase = .needsRegistration(nil)
@@ -313,6 +317,22 @@ public final class AppModel {
 
     // MARK: Editing
 
+    /// Opens the note that was open on this device when the app was last
+    /// used, once per launch. The note is read from the device, so one made
+    /// just before quitting opens even if the cached list does not have it
+    /// yet; a note in the trash is not reopened.
+    private func reopenLastNote() {
+        guard !reopenedLastNote else { return }
+        reopenedLastNote = true
+        guard current == nil, let id = defaults.string(forKey: Self.lastNoteKey) else { return }
+        if let date = Diary.date(ofNote: id) {
+            openDiary(date: date)
+        } else {
+            select(id: id)
+            if let current, current.deleted { closeCurrent() }
+        }
+    }
+
     public func select(id: String) {
         guard let client, current?.id != id else { return }
         closeCurrent()
@@ -396,11 +416,14 @@ public final class AppModel {
         open.editors = editorsByNote[open.id] ?? []
         current = open
         client?.setActiveNote(id: open.id)
+        defaults.set(open.id, forKey: Self.lastNoteKey)
     }
 
     public func closeCurrent() {
         guard let current else { return }
         rememberCursor()
+        // Closed by the user (or replaced by another note): not reopened at launch.
+        defaults.removeObject(forKey: Self.lastNoteKey)
         // A note with unsent changes stays open in the core, so say so apart.
         client?.setActiveNote(id: nil)
         client?.closeNote(id: current.id)

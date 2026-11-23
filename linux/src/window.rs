@@ -71,6 +71,8 @@ struct State {
     search: Option<(String, HashMap<String, String>)>,
     /// Other devices editing each note, as the core last reported.
     editors: HashMap<String, Vec<String>>,
+    /// Whether the note open when the app was last used has been reopened.
+    reopened_last_note: bool,
 }
 
 pub struct Ui {
@@ -149,6 +151,7 @@ pub fn build(app: &adw::Application) -> Rc<App> {
             mode,
             search: None,
             editors: HashMap::new(),
+            reopened_last_note: false,
         }),
         refresh_pending: Cell::new(None),
         search_pending: Cell::new(None),
@@ -659,8 +662,31 @@ impl App {
                     }
                 });
                 self.schedule_refresh();
+                self.reopen_last_note();
             }
             Err(e) => self.toast(&format!("開始できませんでした: {e}")),
+        }
+    }
+
+    /// Opens the note that was open when the app was last used, once per
+    /// launch. The note is read from the device, so one made just before
+    /// quitting opens even if the cached list does not have it yet; a note in
+    /// the trash is not reopened.
+    fn reopen_last_note(self: &Rc<Self>) {
+        let already = std::mem::replace(&mut self.state.borrow_mut().reopened_last_note, true);
+        if already || self.state.borrow().current.is_some() {
+            return;
+        }
+        let Some(id) = config::load_last_note() else { return };
+        if let Some(date) = diary_date(id.clone()) {
+            self.open_diary(&date);
+            return;
+        }
+        self.select_note(&id);
+        let trashed = self.state.borrow().current.as_ref().is_some_and(|n| n.is_deleted());
+        if trashed {
+            self.close_current();
+            config::save_last_note(None);
         }
     }
 
@@ -675,6 +701,7 @@ impl App {
     /// ask to register again.
     pub fn forget_registration(self: &Rc<Self>, message: &str) {
         self.disconnect();
+        config::save_last_note(None);
         let server_url = self.settings().server_url;
         glib::spawn_future_local(async move { config::clear_token(&server_url).await });
         self.set_status_text("未登録");
@@ -1102,6 +1129,7 @@ impl App {
             st.current = Some(note.clone());
             st.client.clone()
         };
+        config::save_last_note(Some(&note.id()));
         // Other devices with this note open see this one as editing it.
         if let Some(client) = client {
             client.set_active_note(Some(note.id()));

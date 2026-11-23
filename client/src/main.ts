@@ -41,6 +41,31 @@ const MODE_KEY = "simple-editor:mode";
 let mode: Mode = localStorage.getItem(MODE_KEY) === "diary" ? "diary" : "notes";
 let calendarMonth: Month = monthOf(today());
 
+// The note open on this device when the page was last used, reopened at start.
+const LAST_NOTE_KEY = "simple-editor:last-note";
+
+function setLastNote(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(LAST_NOTE_KEY, id);
+    else localStorage.removeItem(LAST_NOTE_KEY);
+  } catch {
+    // Storage unavailable: the note is simply not reopened.
+  }
+}
+
+// Opens the note that was open when the page was last used. A diary day opens
+// even if nothing was written in it; other notes only if this device knows
+// them and they are not in the trash.
+function reopenLastNote(): void {
+  const id = localStorage.getItem(LAST_NOTE_KEY);
+  if (!id || !sync) return;
+  const date = diaryDate(id);
+  if (date) return void openDiary(date);
+  const known = notes.get(id);
+  if (!known || known.deleted) return setLastNote(null);
+  void selectNote(id);
+}
+
 const isDiary = (n: NoteSummary) => diaryDate(n.id) !== null;
 // A diary day counts as written once it has some text.
 const isWritten = (n: NoteSummary) => n.title !== "";
@@ -299,6 +324,7 @@ function formatDate(ms: number, withSeconds = false): string {
 
 async function selectNote(id: string, isNew = false): Promise<void> {
   if (!sync) return;
+  setLastNote(id);
   if (current?.note.id === id) return showEditor();
   closeCurrent();
 
@@ -737,7 +763,11 @@ $("search").oninput = () => {
   renderList();
   scheduleSearch();
 };
-$("back").onclick = () => document.body.classList.remove("show-editor");
+// Going back to the list (narrow screens) leaves the note: not reopened at start.
+$("back").onclick = () => {
+  document.body.classList.remove("show-editor");
+  setLastNote(null);
+};
 
 document.querySelectorAll<HTMLButtonElement>("#mode-tabs button").forEach((b) => {
   b.onclick = () => setMode(b.dataset.mode as Mode);
@@ -942,3 +972,4 @@ measureBaseline($("editor"));
 $("build-info").textContent = `build ${__BUILD_NUMBER__}`;
 renderList();
 connect();
+reopenLastNote();

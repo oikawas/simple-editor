@@ -7,6 +7,7 @@ use simple_editor_core::sync::SyncStatus;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -93,11 +94,16 @@ struct Recorder {
     statuses: Mutex<Vec<SyncStatus>>,
     notes_changed: AtomicUsize,
     note_changed: Mutex<Vec<String>>,
+    editors: Mutex<HashMap<String, Vec<String>>>,
 }
 
 impl Recorder {
     fn last_status(&self) -> Option<SyncStatus> {
         self.statuses.lock().unwrap().last().copied()
+    }
+
+    fn editors(&self, id: &str) -> Vec<String> {
+        self.editors.lock().unwrap().get(id).cloned().unwrap_or_default()
     }
 }
 
@@ -110,6 +116,9 @@ impl ClientListener for Recorder {
     }
     fn on_note_changed(&self, id: String) {
         self.note_changed.lock().unwrap().push(id);
+    }
+    fn on_editors_changed(&self, id: String, names: Vec<String>) {
+        self.editors.lock().unwrap().insert(id, names);
     }
 }
 
@@ -143,6 +152,7 @@ async fn device_with(server: &Server, name: &str, retry_interval_secs: Option<u3
             device_token: creds.token.clone(),
             data_dir: data.path().to_string_lossy().into(),
             retry_interval_secs,
+            device_name: Some(name.into()),
         },
         events.clone(),
     )
@@ -214,6 +224,60 @@ async fn two_devices_edit_the_same_note() {
         assert!(Instant::now() < deadline, "search never found the edit");
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn devices_see_who_else_is_editing_a_note() {
+    let server = Server::start();
+    let a = device(&server, "Mac").await;
+    let b = device(&server, "iPhone").await;
+    let note = a.client.create_note().unwrap();
+    note.set_body("Shared".into());
+    let id = note.id();
+    a.client.set_active_note(Some(id.clone()));
+    until("acknowledged", || a.client.pending_note_ids().is_empty()).await;
+
+    // Only the note shown counts: B has it open but is looking elsewhere.
+    let on_b = b.client.open_note(id.clone()).unwrap();
+    until("initial sync", || on_b.body() == "Shared").await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(a.events.editors(&id).is_empty());
+
+    b.client.set_active_note(Some(id.clone()));
+    until("A sees B", || a.events.editors(&id) == ["iPhone"]).await;
+    until("B sees A", || b.events.editors(&id) == ["Mac"]).await;
+
+    // Looking at another note, or closing this one, takes B away.
+    b.client.set_active_note(None);
+    until("B left", || a.events.editors(&id).is_empty()).await;
+    b.client.set_active_note(Some(id.clone()));
+    until("B back", || a.events.editors(&id) == ["iPhone"]).await;
+    b.client.close_note(id.clone());
+    until("B closed the note", || a.events.editors(&id).is_empty()).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn presence_interoperates_with_the_javascript_client() {
+    let server = Server::start();
+    let a = device(&server, "rust").await;
+    let note = a.client.create_note().unwrap();
+    note.set_body("Shared".into());
+    let id = note.id();
+    a.client.set_active_note(Some(id.clone()));
+    until("acknowledged", || a.client.pending_note_ids().is_empty()).await;
+
+    let child = Command::new("node")
+        .current_dir(repo_root())
+        .arg(repo_root().join("core/tests/js-presence.mjs"))
+        .args([&format!("ws://127.0.0.1:{}/sync", server.port), &a.token, &format!("note:{id}"), "rust"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("node");
+    until("Rust sees the web client", || a.events.editors(&id) == ["web"]).await;
+    let out = child.wait_with_output().unwrap();
+    let seen: serde_json::Value = serde_json::from_str(String::from_utf8_lossy(&out.stdout).lines().next().unwrap()).unwrap();
+    assert_eq!(seen["seen"], serde_json::json!(["rust"]), "the web client did not see the Rust device");
+    until("the web client left", || a.events.editors(&id).is_empty()).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

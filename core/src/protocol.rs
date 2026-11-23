@@ -1,6 +1,7 @@
 //! Hocuspocus wire format (v4, without session awareness): every message is
 //! `varString(documentName) varUint(type) payload`, multiplexing several
-//! documents over one WebSocket. Sync payloads are y-protocols sync messages.
+//! documents over one WebSocket. Sync payloads are y-protocols sync messages;
+//! awareness payloads are y-protocols awareness updates.
 
 use yrs::encoding::read::{Cursor, Read};
 use yrs::encoding::write::Write;
@@ -35,8 +36,19 @@ pub enum Incoming {
     /// Acknowledges an update or sync step 2; `true` when it was applied.
     SyncStatus(bool),
     Close(String),
-    /// Awareness (presence) traffic, which this client does not use.
-    Ignored,
+    /// Who else has the document open (y-protocols awareness update).
+    Awareness(Vec<AwarenessEntry>),
+    /// The server asks for this client's awareness state.
+    QueryAwareness,
+}
+
+/// One client's presence in an awareness update. `state` is JSON, or `None`
+/// when the client went away.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AwarenessEntry {
+    pub client: u64,
+    pub clock: u32,
+    pub state: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +82,34 @@ pub fn sync(document: &str, message: &SyncMessage) -> Vec<u8> {
     buf
 }
 
+/// An awareness update: `varUint8Array(varUint(count) (varUint(client)
+/// varUint(clock) varString(json))*)`, with "null" for a client that left.
+pub fn awareness(document: &str, entries: &[AwarenessEntry]) -> Vec<u8> {
+    let mut update = Vec::new();
+    update.write_var(entries.len() as u32);
+    for e in entries {
+        update.write_var(e.client);
+        update.write_var(e.clock);
+        update.write_string(e.state.as_deref().unwrap_or("null"));
+    }
+    let mut buf = header(document, AWARENESS);
+    buf.write_buf(&update);
+    buf
+}
+
+fn decode_awareness(update: &[u8]) -> Result<Vec<AwarenessEntry>, yrs::encoding::read::Error> {
+    let mut cursor = Cursor::new(update);
+    let count: u32 = cursor.read_var()?;
+    let mut entries = Vec::new();
+    for _ in 0..count {
+        let client: u64 = cursor.read_var()?;
+        let clock: u32 = cursor.read_var()?;
+        let json = cursor.read_string()?;
+        entries.push(AwarenessEntry { client, clock, state: (json != "null").then(|| json.to_owned()) });
+    }
+    Ok(entries)
+}
+
 /// Splits a server message into its document name and content. Returns
 /// `None` for a bare ping, which carries no document.
 pub fn decode(data: &[u8]) -> Result<Option<(String, Incoming)>, DecodeError> {
@@ -94,7 +134,8 @@ pub fn decode(data: &[u8]) -> Result<Option<(String, Incoming)>, DecodeError> {
         STATELESS => Incoming::Stateless(cursor.read_string()?.to_owned()),
         SYNC_STATUS => Incoming::SyncStatus(cursor.read_var::<u32>()? == 1),
         CLOSE => Incoming::Close(cursor.read_string()?.to_owned()),
-        AWARENESS | QUERY_AWARENESS => Incoming::Ignored,
+        AWARENESS => Incoming::Awareness(decode_awareness(cursor.read_buf()?)?),
+        QUERY_AWARENESS => Incoming::QueryAwareness,
         other => return Err(DecodeError::UnknownType(other)),
     };
     Ok(Some((document, message)))
@@ -148,6 +189,16 @@ mod tests {
             Some(("__index".into(), Incoming::Stateless("{\"type\":\"changed\"}".into())))
         );
         assert_eq!(decode(&[PING]).unwrap(), None);
+        assert_eq!(decode(&header("d", QUERY_AWARENESS)).unwrap(), Some(("d".into(), Incoming::QueryAwareness)));
         assert!(decode(&header("d", 42)).is_err());
+    }
+
+    #[test]
+    fn awareness_roundtrip() {
+        let entries = vec![
+            AwarenessEntry { client: 1234567890123, clock: 3, state: Some(r#"{"user":{"name":"Mac"}}"#.into()) },
+            AwarenessEntry { client: 7, clock: 9, state: None },
+        ];
+        assert_eq!(decode(&awareness("note:a", &entries)).unwrap(), Some(("note:a".into(), Incoming::Awareness(entries))));
     }
 }

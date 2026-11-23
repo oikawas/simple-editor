@@ -180,14 +180,14 @@ body.mode-diary #tag-filter { display: none; }
 /* Ruled lines: a rule on the baseline of every row, wrapped rows included
    (1lh is the line's own height, so the larger title line works too). The
    style comes from the display settings (applyDisplay). */
-:root { --rule: #d6d6dc; }
-@media (prefers-color-scheme: dark) { :root { --rule: #3c3c43; } }
+:root { --rule: #aeaeb6; }
+@media (prefers-color-scheme: dark) { :root { --rule: #5e5e66; } }
 :root[data-ruled-lines] #editor .cm-line { position: relative; }
 :root[data-ruled-lines] #editor .cm-line::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
-  /* 2px below the baseline: half a line down, then the font's own offset
+  /* 4px below the baseline: half a line down, then the font's own offset
      (--baseline-shift, measured by measureBaseline in markers.ts). */
-  --rule-at: calc(0.5lh + var(--baseline-shift, 0.3) * 1em + 2px);
+  --rule-at: calc(0.5lh + var(--baseline-shift, 0.3) * 1em + 4px);
   background: repeating-linear-gradient(to bottom,
     transparent 0 var(--rule-at),
     var(--rule) var(--rule-at) calc(var(--rule-at) + 0.5px),

@@ -76,9 +76,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
 
     private static var ruleColor: PlatformColor {
         #if os(macOS)
-        .separatorColor
+        NSColor.labelColor.withAlphaComponent(0.35)
         #else
-        .separator
+        UIColor.label.withAlphaComponent(0.35)
         #endif
     }
 
@@ -92,7 +92,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
     }
 
     /// How far below the baseline the rules are drawn.
-    private static let ruleBelowBaseline: CGFloat = 2
+    private static let ruleBelowBaseline: CGFloat = 4
 
     /// A rule just below the baseline of every line fragment, so wrapped rows get one each.
     private func drawRules(_ glyphs: NSRange, at origin: CGPoint, in context: CGContext) {

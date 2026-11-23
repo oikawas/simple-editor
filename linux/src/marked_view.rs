@@ -137,7 +137,7 @@ fn draw(view: &MarkedTextView, snapshot: &gtk::Snapshot, d: Decorations) {
     let baselines = Baselines::new(view);
 
     if d.ruled_lines != RuledLines::None {
-        cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 0.22);
+        cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 0.4);
         cr.set_line_width(0.5);
         cr.set_dash(
             match d.ruled_lines {
@@ -147,10 +147,10 @@ fn draw(view: &MarkedTextView, snapshot: &gtk::Snapshot, d: Decorations) {
             },
             0.0,
         );
-        // A rule 2px below the baseline of every display line, wrapped rows included.
+        // A rule 4px below the baseline of every display line, wrapped rows included.
         let mut it = row;
         loop {
-            let y = baselines.of_row(view, &it) + 2.0;
+            let y = baselines.of_row(view, &it) + 4.0;
             cr.move_to(left, y);
             cr.line_to(right, y);
             let r = view.iter_location(&it);

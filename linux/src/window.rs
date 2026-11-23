@@ -270,18 +270,19 @@ fn build_ui(app: &adw::Application) -> Ui {
     tags_row.append(&tag_entry);
     // The status below the text: length, other devices editing, dates.
     let dates = gtk::Label::builder()
-        .xalign(0.0)
+        .xalign(1.0)
         .margin_start(12)
         .margin_end(12)
         .margin_top(5)
         .margin_bottom(5)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
+        // Right-aligned and cut at the start, so the dates stay in view.
+        .ellipsize(gtk::pango::EllipsizeMode::Start)
         .build();
     dates.add_css_class("dim-label");
     dates.add_css_class("caption");
 
     let buffer = gtk::TextBuffer::new(None);
-    buffer.create_tag(Some("title"), &[("weight", &700i32), ("scale", &1.2f64)]);
+    buffer.create_tag(Some("title"), &[("weight", &700i32), ("scale", &TITLE_SCALE)]);
     let view = MarkedTextView::new(&buffer);
     view.set_wrap_mode(gtk::WrapMode::WordChar);
     view.set_left_margin(16);
@@ -469,6 +470,9 @@ fn connect_signals(app: &Rc<App>) {
     app.ui.changed_handler.replace(Some(handler));
 }
 
+/// How much larger the title (the first line) is set than the text.
+pub const TITLE_SCALE: f64 = 1.5;
+
 /// The length as people count it: characters as they appear (an emoji with
 /// modifiers, or a letter with combining marks, is one), without line breaks.
 fn count_characters(text: &str) -> usize {
@@ -558,12 +562,12 @@ impl App {
         // so a line of Japanese (a fallback font with other metrics) would
         // be taller or shorter than an empty line or one of Latin letters.
         let mut rules = vec![format!("line-height: {:.2}em;", settings.line_height())];
-        // The title line (1.2 times as large) gets the extra height above it.
+        // The title line (TITLE_SCALE times as large) gets the extra height above it.
         let desc = crate::settings_dialog::current_font(&settings);
         let size = desc.size() as f64 / gtk::pango::SCALE as f64;
         let px = if desc.is_size_absolute() { size } else { size * 96.0 / 72.0 };
         if let Some(tag) = self.ui.buffer.tag_table().lookup("title") {
-            tag.set_pixels_above_lines((px * 0.2 * settings.line_height()).round() as i32);
+            tag.set_pixels_above_lines((px * (TITLE_SCALE - 1.0) * settings.line_height()).round() as i32);
         }
         if !font.is_empty() {
             let desc = gtk::pango::FontDescription::from_string(font);

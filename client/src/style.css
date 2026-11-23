@@ -169,6 +169,7 @@ body.mode-diary #tag-filter { display: none; }
 .note-status {
   font-size: 12px; color: var(--muted); padding: 6px 20px calc(6px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: right;
 }
 #editor { flex: 1; min-height: 0; }
 #editor .cm-editor { height: 100%; outline: none; }
@@ -177,7 +178,7 @@ body.mode-diary #tag-filter { display: none; }
   padding: 6px 8px calc(32px + env(safe-area-inset-bottom));
 }
 #editor .cm-content { padding: 0 6px; caret-color: var(--fg); }
-#editor .cm-line:first-child { font-weight: 700; font-size: 1.2em; }
+#editor .cm-line:first-child { font-weight: 700; font-size: 1.5em; }
 #editor .cm-placeholder { color: var(--faint); }
 
 /* Ruled lines: a rule on the baseline of every row, wrapped rows included
@@ -315,7 +316,7 @@ dialog .message { background: var(--accent-soft); border-radius: 8px; padding: 9
   #editor-pane > .bar { padding-left: 6px; }
   #back { color: var(--accent); padding-right: 10px; }
   #back .label { font-size: 14px; }
-  .note-status { padding-left: 14px; }
+  .note-status { padding-left: 14px; padding-right: 14px; }
   .cal-day { width: 40px; height: 40px; font-size: 14px; }
   #history { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0;
     padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }

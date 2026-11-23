@@ -1,6 +1,6 @@
 //! Registering this device, renaming it, and managing registered devices.
 
-use crate::config::{self, Settings};
+use crate::config::{self, RuledLines, Settings};
 use crate::window::App;
 use adw::prelude::*;
 use gtk::glib;
@@ -286,6 +286,41 @@ fn display_group(app: &Rc<App>) -> adw::PreferencesGroup {
         });
     }
     group.add(&line_height);
+
+    let ruled = adw::ComboRow::builder()
+        .title("罫線")
+        .model(&gtk::StringList::new(&RuledLines::ALL.map(RuledLines::label)))
+        .selected(RuledLines::ALL.iter().position(|r| *r == app.settings().ruled_lines).unwrap_or(0) as u32)
+        .build();
+    {
+        let app = app.clone();
+        ruled.connect_selected_notify(move |row| {
+            let mut settings = app.settings();
+            settings.ruled_lines = RuledLines::ALL.get(row.selected() as usize).copied().unwrap_or_default();
+            settings.save();
+            app.set_settings(settings);
+            app.apply_decorations();
+        });
+    }
+    group.add(&ruled);
+    let switches: [(&str, fn(&mut Settings) -> &mut bool); 3] = [
+        ("全角スペースを点線の四角で表示", |s| &mut s.show_full_width_spaces),
+        ("半角スペースを点線の四角で表示", |s| &mut s.show_half_width_spaces),
+        ("改行を記号（↵）で表示", |s| &mut s.show_line_breaks),
+    ];
+    for (title, field) in switches {
+        let mut current = app.settings();
+        let row = adw::SwitchRow::builder().title(title).active(*field(&mut current)).build();
+        let app = app.clone();
+        row.connect_active_notify(move |row| {
+            let mut settings = app.settings();
+            *field(&mut settings) = row.is_active();
+            settings.save();
+            app.set_settings(settings);
+            app.apply_decorations();
+        });
+        group.add(&row);
+    }
 
     // Set while the button is updated in code, so that is not saved as a choice.
     let resetting = Rc::new(std::cell::Cell::new(false));

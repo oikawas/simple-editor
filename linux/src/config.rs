@@ -20,6 +20,39 @@ pub struct Settings {
     /// The sidebar shows the diary instead of the notes.
     #[serde(default)]
     pub diary_mode: bool,
+    /// A rule under every line of the text, and its style.
+    #[serde(default)]
+    pub ruled_lines: RuledLines,
+    /// Marks for full-width spaces, half-width spaces, and line breaks.
+    #[serde(default)]
+    pub show_full_width_spaces: bool,
+    #[serde(default)]
+    pub show_half_width_spaces: bool,
+    #[serde(default)]
+    pub show_line_breaks: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RuledLines {
+    #[default]
+    None,
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+impl RuledLines {
+    pub const ALL: [RuledLines; 4] = [RuledLines::None, RuledLines::Solid, RuledLines::Dashed, RuledLines::Dotted];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            RuledLines::None => "なし",
+            RuledLines::Solid => "実線",
+            RuledLines::Dashed => "破線",
+            RuledLines::Dotted => "点線",
+        }
+    }
 }
 
 pub const DEFAULT_LINE_HEIGHT: f64 = 1.2;

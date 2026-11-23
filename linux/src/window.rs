@@ -3,6 +3,7 @@
 
 use crate::config::{self, Settings};
 use crate::cursors::Cursors;
+use crate::marked_view::{Decorations, MarkedTextView};
 use crate::calendar::DiaryCalendar;
 use crate::{history, settings_dialog};
 use adw::prelude::*;
@@ -86,7 +87,7 @@ pub struct Ui {
     tag_entry: gtk::Entry,
     dates: gtk::Label,
     buffer: gtk::TextBuffer,
-    view: gtk::TextView,
+    view: MarkedTextView,
     font_css: gtk::CssProvider,
     trash_button: gtk::Button,
     changed_handler: RefCell<Option<glib::SignalHandlerId>>,
@@ -146,6 +147,7 @@ pub fn build(app: &adw::Application) -> Rc<App> {
     });
     connect_signals(&app);
     app.apply_font();
+    app.apply_decorations();
     app.render_list();
     app.show_note_ui(false);
     glib::spawn_future_local(clone_rc(&app, |app| async move { app.start().await }));
@@ -215,6 +217,17 @@ fn build_ui(app: &adw::Application) -> Ui {
     side_box.append(&tag_scroll);
     side_box.append(calendar.widget());
     side_box.append(&list_scroll);
+    // The build number (build.rs), small at the bottom left.
+    let build_info = gtk::Label::builder()
+        .label(format!("build {}", env!("SIMPLE_EDITOR_BUILD_NUMBER")))
+        .xalign(0.0)
+        .margin_start(12)
+        .margin_top(4)
+        .margin_bottom(6)
+        .build();
+    build_info.add_css_class("dim-label");
+    build_info.add_css_class("caption");
+    side_box.append(&build_info);
     let side_toolbar = adw::ToolbarView::new();
     side_toolbar.add_top_bar(&side_header);
     side_toolbar.set_content(Some(&side_box));
@@ -253,15 +266,13 @@ fn build_ui(app: &adw::Application) -> Ui {
 
     let buffer = gtk::TextBuffer::new(None);
     buffer.create_tag(Some("title"), &[("weight", &700i32), ("scale", &1.2f64)]);
-    let view = gtk::TextView::builder()
-        .buffer(&buffer)
-        .wrap_mode(gtk::WrapMode::WordChar)
-        .left_margin(16)
-        .right_margin(16)
-        .top_margin(12)
-        .bottom_margin(24)
-        .pixels_below_lines(2)
-        .build();
+    let view = MarkedTextView::new(&buffer);
+    view.set_wrap_mode(gtk::WrapMode::WordChar);
+    view.set_left_margin(16);
+    view.set_right_margin(16);
+    view.set_top_margin(12);
+    view.set_bottom_margin(24);
+    view.set_pixels_below_lines(2);
     view.add_css_class("editor");
     let font_css = gtk::CssProvider::new();
     gtk::style_context_add_provider_for_display(
@@ -491,6 +502,17 @@ impl App {
     }
 
     /// Applies the font and line height chosen in the settings to the editor.
+    /// Ruled lines and marks for spaces and line breaks, from the settings.
+    pub fn apply_decorations(&self) {
+        let s = self.settings();
+        self.ui.view.set_decorations(Decorations {
+            ruled_lines: s.ruled_lines,
+            full_width_spaces: s.show_full_width_spaces,
+            half_width_spaces: s.show_half_width_spaces,
+            line_breaks: s.show_line_breaks,
+        });
+    }
+
     pub fn apply_font(&self) {
         let settings = self.settings();
         let font = &settings.font;

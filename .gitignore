@@ -20,3 +20,4 @@ CLAUDE.local.md
 # Build counter of scripts/next-build-number.sh
 /.build-number
 /.build-number.lock/
+apple/Generated/

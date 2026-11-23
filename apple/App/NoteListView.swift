@@ -196,13 +196,17 @@ private struct StatusBar: View {
         // While offline, tapping tries to connect at once instead of waiting
         // for the next retry.
         Button { model.retryIfOffline() } label: {
-            HStack(spacing: 6) {
-                Circle().fill(color).frame(width: 8, height: 8)
-                Text(text).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                if model.status == .offline {
-                    Image(systemName: "arrow.clockwise").font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                    Text(text).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if model.status == .offline {
+                        Image(systemName: "arrow.clockwise").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                // Generated for every build (the Build number script phase).
+                Text("build \(BuildInfo.number)").font(.caption2).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }

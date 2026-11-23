@@ -23,6 +23,8 @@ struct NoteTextView {
     let lineHeight: Double
     /// Search words to highlight in the text (macOS).
     var highlight: String = ""
+    /// Ruled lines and marks for spaces and line breaks.
+    var decorations = TextDecorations()
     let onEdit: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -62,7 +64,10 @@ struct NoteTextView {
         /// next. Changing the text's attributes would break a composition, so
         /// that waits until it is committed.
         func applyStyle(force: Bool = false) {
-            guard let textView, !composing else { return }
+            guard let textView else { return }
+            // Only drawn, never part of the text, so this is safe while composing.
+            (textView.layoutManager as? DecoratingLayoutManager)?.decorations = parent.decorations
+            guard !composing else { return }
             let font = parent.font
             if !force, case let (applied, height)? = appliedStyle, applied == font, height == parent.lineHeight { return }
             appliedStyle = (font, parent.lineHeight)
@@ -271,9 +276,24 @@ struct NoteTextView {
 #if os(macOS)
 extension NoteTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
+        // TextKit 1, with a layout manager that draws the ruled lines and
+        // the marks for spaces and line breaks behind the text.
+        let storage = NSTextStorage()
+        let layout = DecoratingLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(containerSize: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let textView = NSTextView(frame: .zero, textContainer: container)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
-        let textView = scrollView.documentView as! NSTextView
+        scrollView.documentView = textView
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
@@ -322,8 +342,15 @@ extension NoteTextView: UIViewRepresentable {
         // TextKit 1. With TextKit 2, tapping blank space in a run of empty
         // lines could put the caret on the last line and scroll there (seen
         // when the iOS app runs on a Mac): its estimated line heights put the
-        // tap below the end of the text.
-        let textView = UITextView(usingTextLayoutManager: false)
+        // tap below the end of the text. The layout manager also draws the
+        // ruled lines and the marks for spaces and line breaks.
+        let storage = NSTextStorage()
+        let layout = DecoratingLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let textView = UITextView(frame: .zero, textContainer: container)
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.textColor = .label

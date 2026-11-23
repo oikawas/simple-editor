@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- When the server's certificate cannot be verified, the native apps (Linux, macOS, iOS) now say so and explain how to install and trust the root certificate on the device (they used to say only that the server could not be reached). The web app's message for a failed connection now also suggests checking the certificate
+- The shared core's `CoreError` has a new `Certificate` case for a certificate that could not be verified
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

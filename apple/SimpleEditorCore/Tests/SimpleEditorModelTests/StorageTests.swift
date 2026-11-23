@@ -23,6 +23,14 @@ final class StorageTests: XCTestCase {
         XCTAssertNil(store.load(server: "s"))
     }
 
+    @MainActor
+    func testCertificateErrorsPointToTheRootCertificate() {
+        let message = AppModel.describe(CoreError.Certificate(message: "invalid peer certificate: UnknownIssuer"), registering: true)
+        XCTAssertTrue(message.hasPrefix("サーバーの証明書を確認できません。"))
+        XCTAssertTrue(message.contains("ca.crt"))
+        XCTAssertTrue(message.contains("UnknownIssuer"))
+    }
+
     func testCoreRemapsSelectionAcrossSeveralEdits() {
         // The cursor at the end stays before text appended right there.
         let old = "Title\nbody"

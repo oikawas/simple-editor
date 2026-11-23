@@ -163,7 +163,7 @@ impl Client {
                 self.store.cache_notes(&list)?;
                 list
             }
-            Err(CoreError::Network { .. }) | Err(CoreError::Server { .. }) => self.store.cached_notes()?,
+            Err(CoreError::Network { .. } | CoreError::Certificate { .. } | CoreError::Server { .. }) => self.store.cached_notes()?,
             Err(e) => return Err(e),
         };
         let local: Vec<NoteSummary> = {

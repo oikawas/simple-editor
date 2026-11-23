@@ -448,6 +448,10 @@ public final class AppModel {
     }
 
     /// A message for the user, in Japanese.
+    /// What to do when the server's certificate is not trusted, which on a
+    /// new device usually means its root certificate is not installed yet.
+    static let certificateHelp = "サーバーの証明書を確認できません。この端末でサーバーのルート証明書（http://<サーバー>/ca.crt）を入れて信頼しているか確認してください。Mac はキーチェーンアクセスで「常に信頼」に、iPhone・iPad は「設定」→「一般」→「情報」→「証明書信頼設定」でオンにします。"
+
     public static func describe(_ error: Error, registering: Bool = false) -> String {
         switch error as? CoreError {
         case .Unauthorized?:
@@ -456,6 +460,8 @@ public final class AppModel {
             return "失敗が続いたため、一時的に受け付けを停止しています。\((seconds + 59) / 60) 分ほど待ってから試してください。"
         case .Network(let message)?:
             return "サーバーに接続できません。URL とネットワークを確認してください。\n（\(message)）"
+        case .Certificate(let message)?:
+            return Self.certificateHelp + "\n（\(message)）"
         case .NotFound?:
             return "見つかりませんでした。"
         case .Server(let status)?:

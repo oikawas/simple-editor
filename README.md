@@ -128,7 +128,13 @@ install -Dm644 linux/data/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEd
 
 ## macOS and iOS app (SwiftUI)
 
-Built on a Mac with Xcode. It runs on macOS 15 or later and iOS 18 or later.
+It runs on macOS 15 or later and iOS 18 or later.
+
+### Installing the prebuilt macOS app
+
+Download `Simple-Editor-<version>-macOS.zip` from [Releases](https://github.com/oikawas/simple-editor/releases), unzip it, and move `Simple Editor.app` to the Applications folder. It is signed with a Developer ID and notarized by Apple, so it opens as is. On first launch it asks to register: enter the server URL, a device name, and the registration token (`AUTH_TOKEN` in `.env`).
+
+The iOS app, and a macOS app with your own changes, are built on a Mac with Xcode as follows.
 
 Requirements: Xcode 16 or later, Rust (rustup, not Homebrew's Rust), and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). To build for iPhone, download the iOS platform in Xcode under Settings… → Components.
 

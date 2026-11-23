@@ -122,7 +122,13 @@ install -Dm644 linux/data/icons/hicolor/scalable/apps/io.github.oikawas.SimpleEd
 
 ## macOS・iOS 版（SwiftUI）
 
-Mac で Xcode を使ってビルドします。macOS 15 以上、iOS 18 以上で動きます。
+macOS 15 以上、iOS 18 以上で動きます。
+
+### ビルド済みの macOS 版を入れる
+
+[Releases](https://github.com/oikawas/simple-editor/releases) から `Simple-Editor-<版>-macOS.zip` をダウンロードして展開し、`Simple Editor.app` を「アプリケーション」フォルダに入れます。Developer ID で署名し、Apple の公証を受けているので、そのまま開けます。初回は登録画面が出るので、サーバーの URL、端末名、登録用トークン（`.env` の `AUTH_TOKEN`）を入れます。
+
+iOS 版と、手元で変更した macOS 版は、以下の手順で Xcode を使ってビルドします。
 
 必要なもの: Xcode 16 以上、Rust（rustup。Homebrew の Rust ではなく rustup を使う）、[XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）。iPhone 向けにビルドするには、Xcode の「Settings… → Components」で iOS プラットフォームをダウンロードしておきます。
 

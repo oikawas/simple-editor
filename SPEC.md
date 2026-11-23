@@ -151,6 +151,10 @@ There are two kinds of client:
 - Web app: the text's font size (12 to 28, 15 by default) and line height (1.2 to 2.4, 1.6 by default), kept in the browser's localStorage
 - Native apps: the text's typeface (any installed font), size, and line height (1.0 to 3.0, 1.2 by default). "Reset" returns to the system default
 - The line height is the height of a line as a multiple of the font size
+- In every app: **ruled lines** (none, solid, dashed, or dotted; none by default), and whether **full-width spaces** and **half-width spaces** are shown as dotted boxes and **line breaks** as a symbol (↵) (each on or off; off by default)
+  - A faint rule is drawn at the bottom of every row on screen, wrapped rows included, and under the empty last line too
+  - The rules and marks are only drawn and are not part of the text: copying, saving, syncing, and exporting are unchanged
+  - The web app draws them with CSS (a gradient repeating every `1lh` of each line) and CodeMirror decorations, macOS and iOS in the background drawing of a TextKit 1 `NSLayoutManager`, and Linux in GtkTextView's `snapshot_layer` (the layer below the text)
 
 ### 3.13 Diary
 
@@ -164,6 +168,14 @@ There are two kinds of client:
 - Entries can have tags and use the edit history and restore. Filtering by tag applies to notes only
 - Entries do not go to the trash. To remove one, delete its text (the edit history can bring it back)
 - Search (3.7) covers notes and diary entries alike and finds both from either tab. Entries in the results are labeled "日記" (Diary); choosing one opens that day in the diary tab
+
+### 3.14 Build number
+
+- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42"
+- It goes up by one with every build of the web, Linux, macOS, or iOS app. `scripts/next-build-number.sh` keeps the count in `.build-number` at the top of the repository (not under version control). Builds running at the same time never get the same number
+  - The web app takes one per production build (`vite build`; the dev server shows "dev"), the Linux app on every build of it such as `cargo build` (`linux/build.rs`), and the macOS and iOS apps on every Xcode build (the "Build number" build phase writes `apple/Generated/BuildInfo.swift`)
+  - The count is per checkout of the repository. A Docker build on the server takes the number after the host's `.build-number` if there is one, but does not advance the host's count
+  - It is separate from the app version (`MARKETING_VERSION` and the like) and is not meant to identify releases
 
 ## 4. Architecture
 
@@ -252,7 +264,7 @@ There are two kinds of client:
 - Display in the settings sets the editor's typeface (any installed font, or the system font), size, and line height (applied as the paragraph style's line spacing), kept per device in UserDefaults and applied at once
 - In the list, searched words are highlighted in titles and excerpts (section 3.7)
 - In the macOS app, the first line (the title) is shown bold and 1.2 times as large (as in the web and Linux apps; not in diary entries). While searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
-- The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). The iOS `UITextView` uses TextKit 1: with TextKit 2, tapping blank space in a run of empty lines could put the caret on the last line, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
+- The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). Both use TextKit 1, with an `NSLayoutManager` that draws the ruled lines and the marks for spaces and line breaks (section 3.12). On iOS, TextKit 2 could also put the caret on the last line when blank space in a run of empty lines was tapped, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL, device name, and the last cursor position of each note in UserDefaults; notes in the app's data (Application Support)
@@ -302,6 +314,7 @@ The journal mode is WAL.
 | localStorage `simple-editor:notes` | Cached list |
 | localStorage `simple-editor:pending` | IDs of notes with unsent changes |
 | localStorage `simple-editor:cursors` | The last cursor position of each note (section 3.1) |
+| localStorage `simple-editor:display` | Display settings (section 3.12) |
 
 ## 6. Sync flow
 

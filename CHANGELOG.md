@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Ruled lines in the display settings (none, solid, dashed, or dotted): a faint line under every row on screen, wrapped rows included. In the web, Linux, macOS, and iOS apps
+- Settings to show full-width and half-width spaces as dotted boxes and line breaks as a symbol (↵), each on or off. They are only drawn and not part of the text
+- The build number at the bottom left of the app. It goes up by one with every build of the web, Linux, macOS, or iOS app (`scripts/next-build-number.sh`, counted in `.build-number` at the top of the repository)
+
+### Changed
+
+- The macOS app's text view now uses TextKit 1, like the iOS app, to draw the ruled lines and marks
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

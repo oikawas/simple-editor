@@ -111,7 +111,9 @@ export class SyncClient {
     provider.on("unsyncedChanges", ({ number }: { number: number }) => {
       if (number === 0) setPending(id, false);
     });
-    provider.awareness?.setLocalStateField("user", { name: this.settings.deviceName, color: "#2f6fde" });
+    // Notes opened in the background (to send changes) announce no one; the
+    // note shown sets this device's name (announce).
+    provider.awareness?.setLocalState(null);
     provider.attach();
 
     const note: OpenNote = {
@@ -151,6 +153,13 @@ export class SyncClient {
     } finally {
       this.flushing = false;
     }
+  }
+
+  // Shows this device to the others that have the note open, as the note
+  // the user is looking at.
+  announce(note: OpenNote): void {
+    // The whole state: setLocalStateField does nothing while the state is null.
+    note.provider.awareness?.setLocalState({ user: { name: this.settings.deviceName, color: "#2f6fde" } });
   }
 
   isOpen(id: string): boolean {

@@ -4,6 +4,7 @@ import { EditorView, keymap, placeholder, drawSelection } from "@codemirror/view
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
+import { countCharacters } from "./count";
 import { loadCursor, saveCursor } from "./cursors";
 import { markers, measureBaseline } from "./markers";
 import { bandSelection } from "./selection";
@@ -359,6 +360,11 @@ async function selectNote(id: string, isNew = false): Promise<void> {
   };
   doc.on("afterTransaction", onLocalChange);
   doc.on("update", onAnyChange);
+  // Other devices with this note open (their awareness states).
+  sync.announce(note);
+  const awareness = provider.awareness;
+  const onPresence = () => renderStatus();
+  awareness?.on("change", onPresence);
 
   current = {
     note,
@@ -368,19 +374,35 @@ async function selectNote(id: string, isNew = false): Promise<void> {
       clearTimeout(touchTimer);
       doc.off("afterTransaction", onLocalChange);
       doc.off("update", onAnyChange);
+      awareness?.off("change", onPresence);
       undoManager.destroy();
       view.destroy();
     },
   };
 
+  // The status below the text: length, who else is editing, and dates.
+  function renderStatus() {
+    const s = summarize(id, doc);
+    const parts = [`${countCharacters(body.toString()).toLocaleString()} 文字`];
+    const others = new Set<string>();
+    for (const [client, state] of awareness?.getStates() ?? []) {
+      const name = (state as { user?: { name?: string } })?.user?.name?.trim();
+      // A state this device left behind (another tab, a reload) is not someone else.
+      if (client !== awareness?.clientID && name && name !== settings.deviceName) others.add(name);
+    }
+    if (others.size) parts.push(`編集中: ${[...others].sort().join("、")}`);
+    if (date) {
+      parts.push(`${formatDiaryDate(date)}の日記`);
+      if (meta.has("updatedAt")) parts.push(`更新: ${formatDate(s.updatedAt)}`);
+    } else {
+      parts.push(`作成: ${formatDate(s.createdAt)}`, `更新: ${formatDate(s.updatedAt)}`);
+    }
+    $("note-status").textContent = parts.join("　");
+  }
+
   function renderMeta() {
     const s = summarize(id, doc);
-    if (date) {
-      const updated = meta.has("updatedAt") ? `　更新: ${formatDate(s.updatedAt)}` : "";
-      $("dates").textContent = `${formatDiaryDate(date)}の日記${updated}`;
-    } else {
-      $("dates").textContent = `作成: ${formatDate(s.createdAt)}　更新: ${formatDate(s.updatedAt)}`;
-    }
+    renderStatus();
     const trash = $("trash-note");
     trash.classList.toggle("deleted", s.deleted);
     trash.title = s.deleted ? "ゴミ箱から戻す" : "ゴミ箱へ";

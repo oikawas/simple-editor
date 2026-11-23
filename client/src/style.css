@@ -166,7 +166,10 @@ body.mode-diary #tag-filter { display: none; }
 .tags .chip button:hover { background: var(--fill-strong); color: var(--fg); }
 .tags input { border: 0; outline: 0; background: transparent; min-width: 8em; flex: 1; padding: 4px 2px; font-size: 13px; }
 .tags input::placeholder { color: var(--faint); }
-.dates { font-size: 12px; color: var(--faint); padding: 0 20px 4px; }
+.note-status {
+  font-size: 12px; color: var(--muted); padding: 6px 20px calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 #editor { flex: 1; min-height: 0; }
 #editor .cm-editor { height: 100%; outline: none; }
 #editor .cm-scroller {
@@ -219,7 +222,7 @@ body:not(.mode-diary) #new-note .for-notes, #trash-note span { display: inline-f
 
 .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); pointer-events: none; padding: 24px; text-align: center; }
 body.has-note .empty { display: none; }
-body:not(.has-note) #editor-pane .bar > :not(.mobile-only), body:not(.has-note) .dates { visibility: hidden; }
+body:not(.has-note) #editor-pane .bar > :not(.mobile-only), body:not(.has-note) .note-status { visibility: hidden; }
 .for-diary, body.mode-diary .for-notes { display: none; }
 body.mode-diary .for-diary { display: inline-flex; }
 body.mode-diary .empty .for-diary { display: inline; }
@@ -312,7 +315,7 @@ dialog .message { background: var(--accent-soft); border-radius: 8px; padding: 9
   #editor-pane > .bar { padding-left: 6px; }
   #back { color: var(--accent); padding-right: 10px; }
   #back .label { font-size: 14px; }
-  .dates { padding-left: 14px; }
+  .note-status { padding-left: 14px; }
   .cal-day { width: 40px; height: 40px; font-size: 14px; }
   #history { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0;
     padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }

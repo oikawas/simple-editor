@@ -24,6 +24,61 @@ final class ServerTests: XCTestCase {
         return AppModel(tokens: MemoryTokenStore(), defaults: defaults, dataDirectory: dir, defaultDeviceName: name)
     }
 
+    func testReopensTheLastNoteAtLaunch() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("se-model-\(UUID().uuidString)")
+        let defaults = UserDefaults(suiteName: "se-test-\(UUID().uuidString)")!
+        let tokens = MemoryTokenStore()
+        // Each launch is a new model on the same device: same settings, token and data.
+        func launch() -> AppModel {
+            let model = AppModel(tokens: tokens, defaults: defaults, dataDirectory: dir, defaultDeviceName: "Mac")
+            model.start()
+            return model
+        }
+        // The core saves edits on the device in the background; once the
+        // server lists a change, it has been saved here as well.
+        func untilListed(_ model: AppModel, _ what: String, _ check: @escaping (NoteSummary) -> Bool) async throws {
+            for _ in 0..<100 {
+                await model.refresh()
+                if model.notes.contains(where: check) { return }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            XCTFail("timed out waiting for \(what)")
+            throw CancellationError()
+        }
+        let first = launch()
+        try await first.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
+        try await until("online") { first.status == .online }
+        let note = try XCTUnwrap(first.createNote())
+        note.edit("開き直すノート")
+        first.currentNoteChanged()
+        try await untilListed(first, "the note on the server") { $0.id == note.id && $0.title == "開き直すノート" }
+
+        // Quit with the note open: the next launch opens it again, in the notes.
+        let second = launch()
+        XCTAssertEqual(second.phase, .ready)
+        XCTAssertEqual(second.current?.id, note.id)
+        XCTAssertEqual(second.current?.text, "開き直すノート")
+
+        // A diary day left open comes back with the diary shown.
+        second.openDiary(date: "2026-01-02")
+        let third = launch()
+        XCTAssertEqual(third.current?.diaryDate, "2026-01-02")
+        XCTAssertEqual(third.mode, .diary)
+
+        // A note moved to the trash is not reopened.
+        third.select(id: note.id)
+        try XCTUnwrap(third.current).setDeleted(true)
+        try await untilListed(third, "the note in the trash") { $0.id == note.id && $0.deleted }
+        let trashed = launch()
+        XCTAssertNil(trashed.current)
+
+        // Closed before quitting: nothing is opened.
+        trashed.openDiary(date: "2026-01-03")
+        trashed.closeCurrent()
+        let fourth = launch()
+        XCTAssertNil(fourth.current)
+    }
+
     func until(_ what: String, _ check: @escaping () -> Bool) async throws {
         for _ in 0..<300 {
             if check() { return }

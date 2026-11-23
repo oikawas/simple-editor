@@ -176,6 +176,32 @@ body.mode-diary #tag-filter { display: none; }
 #editor .cm-content { padding: 0 6px; caret-color: var(--fg); }
 #editor .cm-line:first-child { font-weight: 700; font-size: 1.2em; }
 #editor .cm-placeholder { color: var(--faint); }
+
+/* Ruled lines: a rule at the bottom of every row, wrapped rows included
+   (1lh is the line's own height, so the larger title line works too). The
+   style comes from the display settings (applyDisplay). */
+:root { --rule: #d6d6dc; }
+@media (prefers-color-scheme: dark) { :root { --rule: #3c3c43; } }
+:root[data-ruled-lines] #editor .cm-line { position: relative; }
+:root[data-ruled-lines] #editor .cm-line::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 calc(1lh - 1px), var(--rule) calc(1lh - 1px) 1lh);
+}
+:root[data-ruled-lines="dashed"] #editor .cm-line::before {
+  mask-image: repeating-linear-gradient(to right, #000 0 6px, transparent 6px 10px);
+}
+:root[data-ruled-lines="dotted"] #editor .cm-line::before {
+  mask-image: repeating-linear-gradient(to right, #000 0 1.5px, transparent 1.5px 4px);
+}
+
+/* Spaces and line breaks (markers.ts); hidden unless turned on. */
+:root[data-full-width-spaces] #editor .cm-full-space { outline: 1px dotted var(--faint); outline-offset: -2px; }
+:root[data-half-width-spaces] #editor .cm-half-space { outline: 1px dotted var(--faint); outline-offset: -1px; }
+#editor .cm-line-break { display: none; color: var(--faint); pointer-events: none; user-select: none; }
+:root[data-line-breaks] #editor .cm-line-break { display: inline; }
+
+/* The build number, small at the bottom left. */
+.build-info { padding: 4px 14px calc(6px + env(safe-area-inset-bottom)); font-size: 10.5px; color: var(--faint); }
 body.is-diary #trash-note { display: none; }
 body.is-diary #editor .cm-line:first-child { font-weight: inherit; font-size: inherit; }
 /* Icons inside buttons sit centered next to their labels. */
@@ -212,6 +238,8 @@ dialog input, dialog select {
   background: var(--fill); color: var(--fg); outline: none;
 }
 dialog input:focus, dialog select:focus { box-shadow: 0 0 0 1.5px var(--accent); }
+dialog label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+dialog label.check input { display: inline; width: auto; margin: 0; }
 dialog .hint { font-size: 12px; color: var(--faint); margin: 4px 0 0; }
 dialog .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 20px; }
 dialog .row button:not(.primary) { background: var(--fill); }

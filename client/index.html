@@ -30,6 +30,7 @@
         <nav id="tag-filter"></nav>
         <section id="calendar"></section>
         <ul id="note-list"></ul>
+        <footer id="build-info" class="build-info"></footer>
       </aside>
       <main id="editor-pane">
         <header class="bar">
@@ -84,6 +85,17 @@
               <option value="2.4">2.4</option>
             </select>
           </label>
+          <label>罫線
+            <select name="ruledLines">
+              <option value="none">なし（標準）</option>
+              <option value="solid">実線</option>
+              <option value="dashed">破線</option>
+              <option value="dotted">点線</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" name="showFullWidthSpaces" /> 全角スペースを点線の四角で表示する</label>
+          <label class="check"><input type="checkbox" name="showHalfWidthSpaces" /> 半角スペースを点線の四角で表示する</label>
+          <label class="check"><input type="checkbox" name="showLineBreaks" /> 改行を記号（↵）で表示する</label>
           <p class="hint">この端末（ブラウザ）だけの設定で、すぐに反映されます。</p>
         </section>
         <section id="devices-section" hidden>

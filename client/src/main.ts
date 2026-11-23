@@ -5,6 +5,7 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { loadCursor, saveCursor } from "./cursors";
+import { markers } from "./markers";
 import {
   diaryDate,
   diaryId,
@@ -17,7 +18,7 @@ import {
 } from "./diary";
 import { lineDiff, restoreVersion, type Version, type VersionInfo } from "./history";
 import { newId, normalizeTag, summarize, type NoteSummary } from "./notes";
-import { applyDisplay, loadDisplay, loadSettings, saveDisplay, saveSettings, type Settings } from "./settings";
+import { applyDisplay, loadDisplay, loadSettings, saveDisplay, saveSettings, type RuledLines, type Settings } from "./settings";
 import { SyncClient, hasPending, type OpenNote, type Status } from "./sync";
 import "./style.css";
 
@@ -329,6 +330,7 @@ async function selectNote(id: string, isNew = false): Promise<void> {
         EditorView.lineWrapping,
         placeholder(date ? "この日の出来事を書きます" : "最初の行がタイトルになります"),
         yCollab(body, provider.awareness, { undoManager }),
+        markers,
       ],
     }),
   });
@@ -578,6 +580,8 @@ function openSettings(message = ""): void {
   const display = loadDisplay();
   field("fontSize").value = String(display.fontSize);
   field("lineHeight").value = display.lineHeight.toFixed(1);
+  field("ruledLines").value = display.ruledLines;
+  for (const name of DISPLAY_SWITCHES) checkbox(name).checked = display[name];
   showSettingsMessage(message);
   showImportMessage("");
   updateSettingsForm();
@@ -654,10 +658,20 @@ async function revokeFromSettings(id: string, name: string, current: boolean): P
 }
 
 // Display changes apply at once and are kept even if the dialog is closed.
+const DISPLAY_SWITCHES = ["showFullWidthSpaces", "showHalfWidthSpaces", "showLineBreaks"] as const;
+const checkbox = (name: string) => settingsForm().elements.namedItem(name) as HTMLInputElement;
+
 settingsForm().addEventListener("change", (e) => {
-  const name = (e.target as HTMLElement).getAttribute("name");
-  if (name !== "fontSize" && name !== "lineHeight") return;
-  const display = { fontSize: Number(field("fontSize").value), lineHeight: Number(field("lineHeight").value) };
+  const name = (e.target as HTMLElement).getAttribute("name") ?? "";
+  if (!["fontSize", "lineHeight", "ruledLines", ...DISPLAY_SWITCHES].includes(name)) return;
+  const display = {
+    fontSize: Number(field("fontSize").value),
+    lineHeight: Number(field("lineHeight").value),
+    ruledLines: field("ruledLines").value as RuledLines,
+    showFullWidthSpaces: checkbox("showFullWidthSpaces").checked,
+    showHalfWidthSpaces: checkbox("showHalfWidthSpaces").checked,
+    showLineBreaks: checkbox("showLineBreaks").checked,
+  };
   saveDisplay(display);
   applyDisplay(display);
 });
@@ -899,5 +913,6 @@ $<HTMLInputElement>("import-file").onchange = async () => {
 };
 
 applyDisplay(loadDisplay());
+$("build-info").textContent = `build ${__BUILD_NUMBER__}`;
 renderList();
 connect();

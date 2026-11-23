@@ -48,7 +48,16 @@ export interface Display {
   fontSize: number;
   // Line height as a multiple of the font size.
   lineHeight: number;
+  // A rule under every line of the text, and its style.
+  ruledLines: RuledLines;
+  // Marks for full-width spaces, half-width spaces, and line breaks.
+  showFullWidthSpaces: boolean;
+  showHalfWidthSpaces: boolean;
+  showLineBreaks: boolean;
 }
+
+export type RuledLines = "none" | "solid" | "dashed" | "dotted";
+const RULED_LINES: RuledLines[] = ["none", "solid", "dashed", "dotted"];
 
 const DISPLAY_KEY = "simple-editor:display";
 export const DEFAULT_FONT_SIZE = 15;
@@ -62,10 +71,25 @@ export function loadDisplay(): Display {
     return {
       fontSize: size >= 8 && size <= 48 ? size : DEFAULT_FONT_SIZE,
       lineHeight: height >= 1 && height <= 3 ? height : DEFAULT_LINE_HEIGHT,
+      ruledLines: RULED_LINES.includes(d.ruledLines) ? d.ruledLines : "none",
+      showFullWidthSpaces: d.showFullWidthSpaces === true,
+      showHalfWidthSpaces: d.showHalfWidthSpaces === true,
+      showLineBreaks: d.showLineBreaks === true,
     };
   } catch {
-    return { fontSize: DEFAULT_FONT_SIZE, lineHeight: DEFAULT_LINE_HEIGHT };
+    return defaultDisplay();
   }
+}
+
+export function defaultDisplay(): Display {
+  return {
+    fontSize: DEFAULT_FONT_SIZE,
+    lineHeight: DEFAULT_LINE_HEIGHT,
+    ruledLines: "none",
+    showFullWidthSpaces: false,
+    showHalfWidthSpaces: false,
+    showLineBreaks: false,
+  };
 }
 
 export function saveDisplay(d: Display): void {
@@ -75,6 +99,17 @@ export function saveDisplay(d: Display): void {
 export function applyDisplay(d: Display): void {
   document.documentElement.style.setProperty("--editor-font-size", `${d.fontSize}px`);
   document.documentElement.style.setProperty("--editor-line-height", String(d.lineHeight));
+  // The editor's marks are always there; these attributes make them visible.
+  const root = document.documentElement.dataset;
+  if (d.ruledLines === "none") delete root.ruledLines;
+  else root.ruledLines = d.ruledLines;
+  const flag = (name: "fullWidthSpaces" | "halfWidthSpaces" | "lineBreaks", on: boolean) => {
+    if (on) root[name] = "";
+    else delete root[name];
+  };
+  flag("fullWidthSpaces", d.showFullWidthSpaces);
+  flag("halfWidthSpaces", d.showHalfWidthSpaces);
+  flag("lineBreaks", d.showLineBreaks);
 }
 
 export function syncUrl(s: Settings): string {

@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Ruled lines in the display settings (none, solid, dashed, or dotted): a faint, thin line on the text's baseline in every row on screen, wrapped rows included. In the web, Linux, macOS, and iOS apps
+- Ruled lines in the display settings (none, solid, dashed, or dotted): a faint, thin line 2 pixels below the text's baseline in every row on screen, wrapped rows included. In the web, Linux, macOS, and iOS apps
 - Settings to show full-width and half-width spaces as dotted boxes and line breaks as a symbol (↵, an arrow one half-width character wide), each on or off. They are only drawn and not part of the text
 - The build number at the bottom left of the app. It goes up by one with every build of the web, Linux, macOS, or iOS app (`scripts/next-build-number.sh`, counted in `.build-number` at the top of the repository)
 

@@ -147,10 +147,10 @@ fn draw(view: &MarkedTextView, snapshot: &gtk::Snapshot, d: Decorations) {
             },
             0.0,
         );
-        // A rule on the baseline of every display line, wrapped rows included.
+        // A rule 2px below the baseline of every display line, wrapped rows included.
         let mut it = row;
         loop {
-            let y = baselines.of_row(view, &it);
+            let y = baselines.of_row(view, &it) + 2.0;
             cr.move_to(left, y);
             cr.line_to(right, y);
             let r = view.iter_location(&it);

@@ -185,9 +185,9 @@ body.mode-diary #tag-filter { display: none; }
 :root[data-ruled-lines] #editor .cm-line { position: relative; }
 :root[data-ruled-lines] #editor .cm-line::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
-  /* On the baseline: half a line down, then the font's own offset
+  /* 2px below the baseline: half a line down, then the font's own offset
      (--baseline-shift, measured by measureBaseline in markers.ts). */
-  --rule-at: calc(0.5lh + var(--baseline-shift, 0.3) * 1em);
+  --rule-at: calc(0.5lh + var(--baseline-shift, 0.3) * 1em + 2px);
   background: repeating-linear-gradient(to bottom,
     transparent 0 var(--rule-at),
     var(--rule) var(--rule-at) calc(var(--rule-at) + 0.5px),

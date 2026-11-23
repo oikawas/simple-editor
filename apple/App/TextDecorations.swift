@@ -91,14 +91,18 @@ final class DecoratingLayoutManager: NSLayoutManager {
         if decorations.marksAnything { drawMarks(glyphsToShow, at: origin, in: context) }
     }
 
-    /// A rule on the baseline of every line fragment, so wrapped rows get one each.
+    /// How far below the baseline the rules are drawn.
+    private static let ruleBelowBaseline: CGFloat = 2
+
+    /// A rule just below the baseline of every line fragment, so wrapped rows get one each.
     private func drawRules(_ glyphs: NSRange, at origin: CGPoint, in context: CGContext) {
         context.setStrokeColor(Self.ruleColor.cgColor)
         context.setLineWidth(0.5)
         context.setLineDash(phase: 0, lengths: decorations.ruledLines.dashes)
         func rule(at y: CGFloat, across rect: CGRect, padding: CGFloat) {
-            context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: origin.y + y))
-            context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: origin.y + y))
+            let y = origin.y + y + Self.ruleBelowBaseline
+            context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: y))
+            context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: y))
         }
         let text = (textStorage?.string ?? "") as NSString
         enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, range, _ in

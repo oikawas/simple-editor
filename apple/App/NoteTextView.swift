@@ -120,10 +120,13 @@ struct NoteTextView {
         private var titleFont: NSFont {
             let font = parent.font
             let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
-            return NSFont(descriptor: bold.fontDescriptor, size: font.pointSize * 1.2) ?? bold
+            return NSFont(descriptor: bold.fontDescriptor, size: font.pointSize * Self.titleScale) ?? bold
         }
 
-        /// Shows the first line, the note's title, bold and 1.2 times as large,
+        /// How much larger the title (the first line) is set than the text.
+        static let titleScale: CGFloat = 1.5
+
+        /// Shows the first line, the note's title, bold and titleScale times as large,
         /// as the web and Linux apps do; not in diary entries. Only attributes
         /// change, so this waits while composing.
         func styleTitle() {

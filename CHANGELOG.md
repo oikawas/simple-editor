@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The title (the first line) is now 1.5 times as large as the text, up from 1.2 (web, Linux, macOS)
+- The status area is right-aligned
 - In the native apps (Linux, macOS, iOS), every line now has the same fixed height (font size times line height). Lines of Japanese (set in a fallback font) used to differ in height from empty lines and lines of Latin letters
 - The caret and the selection are now as tall as the text rather than the line (web, Linux, macOS, iOS). The macOS and iOS apps center the text in its line
 - The macOS app's text view now uses TextKit 1, like the iOS app, to draw the ruled lines and marks

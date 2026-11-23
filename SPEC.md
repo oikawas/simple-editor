@@ -186,7 +186,7 @@ There are two kinds of client:
 
 ### 3.15 Status area
 
-- A one-line status area below the text shows, for the open note (every app). The creation and update times moved here from above the text
+- A one-line status area below the text (right-aligned; cut on the left when it does not fit) shows, for the open note (every app). The creation and update times moved here from above the text
   - Length: the characters of the whole text without line breaks, counted as they appear (an emoji with modifiers, or a letter with combining marks, is one)
   - Editing: the names of the other devices showing this note now (left out when there are none). Devices with the same name are shown once, and presence this device left behind (say, before the app restarted) is left out
   - The creation and update times (for a diary entry, its date and the update time; a day not written has no update time)
@@ -281,7 +281,7 @@ There are two kinds of client:
 - The list's toolbar: on macOS, a settings (gear) button of its own, with exporting everything in the File menu of the menu bar; on iOS, a "その他" (More) menu with the settings, exporting everything, and importing from a pomera
 - Display in the settings sets the editor's typeface (any installed font, or the system font), size, and line height (applied as the paragraph style's line spacing), kept per device in UserDefaults and applied at once
 - In the list, searched words are highlighted in titles and excerpts (section 3.7)
-- In the macOS app, the first line (the title) is shown bold and 1.2 times as large (as in the web and Linux apps; not in diary entries). While searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
+- In the macOS app, the first line (the title) is shown bold and 1.5 times as large (as in the web and Linux apps; not in diary entries; the iOS app shows it at the text's size). While searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
 - The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). Both use TextKit 1, with an `NSLayoutManager` that draws the ruled lines and the marks for spaces and line breaks (section 3.12). On iOS, TextKit 2 could also put the caret on the last line when blank space in a run of empty lines was tapped, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place

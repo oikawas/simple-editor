@@ -77,8 +77,9 @@ struct EditorView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Right-aligned and cut at the start, so the dates stay in view.
+                .truncationMode(.head)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
                 .padding(.vertical, 6)
         }

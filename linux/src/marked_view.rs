@@ -86,7 +86,7 @@ impl MarkedTextView {
 /// out on its own with Pango, and its baseline placed where the row's
 /// characters are (their box is centered in the row by the line height).
 /// The row's own text matters: Japanese comes from a fallback font with
-/// other metrics. The title line is set bold and 1.2 times as large.
+/// other metrics. The title line is set bold and TITLE_SCALE times as large.
 struct Baselines {
     title: Option<gtk::TextTag>,
     title_attrs: gtk::pango::AttrList,
@@ -95,7 +95,7 @@ struct Baselines {
 impl Baselines {
     fn new(view: &MarkedTextView) -> Self {
         let title_attrs = gtk::pango::AttrList::new();
-        title_attrs.insert(gtk::pango::AttrFloat::new_scale(1.2));
+        title_attrs.insert(gtk::pango::AttrFloat::new_scale(crate::window::TITLE_SCALE));
         title_attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
         Baselines { title: view.buffer().tag_table().lookup("title"), title_attrs }
     }

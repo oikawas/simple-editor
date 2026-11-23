@@ -6,6 +6,7 @@ import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { loadCursor, saveCursor } from "./cursors";
 import { markers, measureBaseline } from "./markers";
+import { bandSelection } from "./selection";
 import {
   diaryDate,
   diaryId,
@@ -331,6 +332,7 @@ async function selectNote(id: string, isNew = false): Promise<void> {
         placeholder(date ? "この日の出来事を書きます" : "最初の行がタイトルになります"),
         yCollab(body, provider.awareness, { undoManager }),
         markers,
+        bandSelection,
       ],
     }),
   });

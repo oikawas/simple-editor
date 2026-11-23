@@ -228,8 +228,10 @@ body.mode-diary .empty .for-diary { display: inline; }
 /* CodeMirror draws its own caret and selection and does not follow the
    page's dark mode; use the app's colors so they show in both themes. */
 #editor .cm-cursor, #editor .cm-dropCursor { border-left: 2px solid var(--fg); }
-#editor .cm-selectionBackground { background: var(--accent-soft) !important; }
-#editor .cm-focused .cm-selectionBackground { background: var(--accent-soft) !important; }
+/* The selection is drawn as tall as the text (selection.ts), not CodeMirror's
+   whole-line one. */
+#editor .cm-selectionLayer { display: none; }
+#editor .cm-bandSelection { background: var(--accent-soft); }
 .cm-ySelectionInfo { font-family: inherit; font-size: 11px; }
 
 /* ---- dialogs ---- */

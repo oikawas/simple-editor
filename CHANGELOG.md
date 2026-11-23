@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - In the native apps (Linux, macOS, iOS), every line now has the same fixed height (font size times line height). Lines of Japanese (set in a fallback font) used to differ in height from empty lines and lines of Latin letters
-- In the macOS and iOS apps, the caret and the selection are now as tall as the text rather than the line, and the text is centered in its line
+- The caret and the selection are now as tall as the text rather than the line (web, Linux, macOS, iOS). The macOS and iOS apps center the text in its line
 - The macOS app's text view now uses TextKit 1, like the iOS app, to draw the ruled lines and marks
 - In the macOS app's list toolbar, the settings button now stands on its own instead of being in the "その他" (More) menu. Exporting everything moved to File > "すべて書き出し (.zip)…" (⇧⌘E) in the menu bar and is no longer in the window
 

@@ -44,9 +44,13 @@ mod imp {
     impl TextViewImpl for MarkedTextView {
         fn snapshot_layer(&self, layer: gtk::TextViewLayer, snapshot: gtk::Snapshot) {
             self.parent_snapshot_layer(layer, snapshot.clone());
-            let d = self.decorations.get();
-            if layer == gtk::TextViewLayer::BelowText && (d.ruled_lines != RuledLines::None || d.marks_anything()) {
-                draw(&self.obj(), &snapshot, d);
+            if layer == gtk::TextViewLayer::BelowText {
+                let view = self.obj();
+                draw_selection(&view, &snapshot);
+                let d = self.decorations.get();
+                if d.ruled_lines != RuledLines::None || d.marks_anything() {
+                    draw(&view, &snapshot, d);
+                }
             }
         }
     }
@@ -60,7 +64,14 @@ glib::wrapper! {
 
 impl MarkedTextView {
     pub fn new(buffer: &gtk::TextBuffer) -> Self {
-        glib::Object::builder().property("buffer", buffer).build()
+        let view: Self = glib::Object::builder().property("buffer", buffer).build();
+        // GTK fills the selection over whole lines, line spacing included;
+        // draw_selection fills only the text's height instead.
+        view.add_css_class("marked");
+        let css = gtk::CssProvider::new();
+        css.load_from_string("textview.marked > text > selection { background-color: transparent; color: inherit; }");
+        gtk::style_context_add_provider_for_display(&WidgetExt::display(&view), &css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        view
     }
 
     pub fn set_decorations(&self, d: Decorations) {
@@ -116,6 +127,52 @@ impl Baselines {
     /// The size of a full-width character (1em) at `at`.
     fn em(&self, view: &MarkedTextView, at: &gtk::TextIter) -> f64 {
         self.layout(view, at, "あ").pixel_size().0 as f64
+    }
+}
+
+/// The selection, as tall as the text in each display line (a character's
+/// box is the font's height), not the line; a selected line break fills to
+/// the right edge.
+fn draw_selection(view: &MarkedTextView, snapshot: &gtk::Snapshot) {
+    let buffer = view.buffer();
+    let Some((start, end)) = buffer.selection_bounds() else { return };
+    let visible = view.visible_rect();
+    let right = (visible.x() + visible.width() - view.right_margin()) as f32;
+    let color = if view.has_focus() {
+        gtk::gdk::RGBA::new(0.21, 0.52, 0.89, 0.3)
+    } else {
+        gtk::gdk::RGBA::new(0.5, 0.5, 0.5, 0.25)
+    };
+    let mut row = start;
+    view.backward_display_line_start(&mut row);
+    loop {
+        let mut row_end = row;
+        if !row.ends_line() && !view.forward_display_line_end(&mut row_end) {
+            row_end = buffer.end_iter();
+        }
+        let from = if row < start { start } else { row };
+        let to = if row_end < end { row_end } else { end };
+        let band = view.iter_location(&row);
+        if band.y() > visible.y() + visible.height() {
+            break;
+        }
+        let x0 = view.iter_location(&from).x() as f32;
+        // Up to the selection's end, or to the right edge past a selected line break.
+        let x1 = if to == row_end && row_end < end && row_end.ends_line() {
+            right
+        } else {
+            view.iter_location(&to).x() as f32
+        };
+        if x1 > x0 {
+            let rect = graphene::Rect::new(x0, band.y() as f32, x1 - x0, band.height() as f32);
+            snapshot.append_color(&color, &rect);
+        }
+        let mut next = row;
+        view.forward_display_line(&mut next);
+        if next == row || next >= end {
+            break;
+        }
+        row = next;
     }
 }
 

@@ -347,7 +347,7 @@ fn display_group(app: &Rc<App>) -> adw::PreferencesGroup {
     group
 }
 
-fn current_font(settings: &Settings) -> gtk::pango::FontDescription {
+pub fn current_font(settings: &Settings) -> gtk::pango::FontDescription {
     if !settings.font.is_empty() {
         return gtk::pango::FontDescription::from_string(&settings.font);
     }

@@ -100,17 +100,32 @@ final class DecoratingLayoutManager: NSLayoutManager {
             context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: origin.y + y))
             context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: origin.y + y))
         }
+        let text = (textStorage?.string ?? "") as NSString
         enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, range, _ in
-            // A glyph's location is its baseline point within the fragment.
-            rule(at: rect.minY + self.location(forGlyphAt: range.location).y, across: rect, padding: container.lineFragmentPadding)
+            rule(at: self.baseline(of: rect, firstGlyph: range.location, in: text), across: rect, padding: container.lineFragmentPadding)
         }
         // The empty line after a final line break, set in the typing font.
         if NSMaxRange(glyphs) >= numberOfGlyphs, !extraLineFragmentRect.isEmpty {
             let rect = extraLineFragmentRect
-            let font = typingFont
-            rule(at: rect.minY + font.ascender, across: rect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
+            // Lines have a fixed height with the text at the bottom, so the
+            // baseline is the font's descent above the line's bottom.
+            rule(at: rect.maxY + typingFont.descender, across: rect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
         }
         context.strokePath()
+    }
+
+    /// Where the baseline of a line fragment is. A glyph's location is its
+    /// baseline point within the fragment, except for the line break that is
+    /// all an empty line holds, which reports the bottom. Lines have a fixed
+    /// height with the text at the bottom, so there the baseline is the
+    /// font's descent above the bottom.
+    private func baseline(of rect: CGRect, firstGlyph glyph: Int, in text: NSString) -> CGFloat {
+        let char = characterIndexForGlyph(at: glyph)
+        guard char < text.length, text.character(at: char) == 0x0A else {
+            return rect.minY + location(forGlyphAt: glyph).y
+        }
+        let font = textStorage?.attribute(.font, at: char, effectiveRange: nil) as? PlatformFont ?? typingFont
+        return rect.maxY + font.descender
     }
 
     /// The font of the end of the text, which an empty last line takes.
@@ -129,6 +144,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
         context.setStrokeColor(Self.markColor.cgColor)
         context.setLineWidth(1)
         context.setLineDash(phase: 0, lengths: [1, 1.5])
+        var lineBreakArrows: [(CGPoint, CGFloat)] = []
         for i in chars.location..<NSMaxRange(chars) {
             let c = text.character(at: i)
             let space = (c == 0x3000 && decorations.fullWidthSpaces) || (c == 0x20 && decorations.halfWidthSpaces)
@@ -139,7 +155,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
             let font = storage.attribute(.font, at: i, effectiveRange: nil) as? PlatformFont
                 ?? PlatformFont.systemFont(ofSize: PlatformFont.systemFontSize)
             let line = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            let baseline = origin.y + line.minY + location(forGlyphAt: glyph).y
+            let baseline = origin.y + baseline(of: line, firstGlyph: glyphRange(forCharacterRange: NSRange(location: i, length: 1), actualCharacterRange: nil).location, in: text)
             let box = boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
             let x = origin.x + box.minX
             if space {
@@ -158,9 +174,25 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 } else {
                     end = origin.x + line.minX + container.lineFragmentPadding
                 }
-                let mark = NSAttributedString(string: "↵", attributes: [.font: font, .foregroundColor: Self.markColor])
-                mark.draw(at: CGPoint(x: end + 1, y: baseline - font.ascender))
+                lineBreakArrows.append((CGPoint(x: end, y: baseline), font.pointSize))
             }
         }
+        context.setLineDash(phase: 0, lengths: [])
+        for (point, size) in lineBreakArrows { drawLineBreakArrow(at: point, size: size, in: context) }
+    }
+
+    /// The line break mark: a ↵ arrow drawn as lines, half a character wide
+    /// (as wide as a half-width character), standing on the baseline at `p`.
+    private func drawLineBreakArrow(at p: CGPoint, size em: CGFloat, in context: CGContext) {
+        let right = p.x + em * 0.38, left = p.x + em * 0.08
+        let top = p.y - em * 0.62, bottom = p.y - em * 0.12
+        let head = em * 0.12
+        context.move(to: CGPoint(x: right, y: top))
+        context.addLine(to: CGPoint(x: right, y: bottom))
+        context.addLine(to: CGPoint(x: left, y: bottom))
+        context.move(to: CGPoint(x: left + head, y: bottom - head))
+        context.addLine(to: CGPoint(x: left, y: bottom))
+        context.addLine(to: CGPoint(x: left + head, y: bottom + head))
+        context.strokePath()
     }
 }

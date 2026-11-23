@@ -41,11 +41,17 @@ class LineBreakWidget extends WidgetType {
   eq() {
     return true;
   }
+  // A ↵ arrow drawn as lines, half a character wide (as wide as a
+  // half-width character), standing on the baseline; the same shape as in
+  // the native apps. The viewBox is 1em tall with the baseline at 0.8.
   toDOM() {
     const span = document.createElement("span");
     span.className = "cm-line-break";
-    span.textContent = "↵";
     span.setAttribute("aria-hidden", "true");
+    span.innerHTML =
+      '<svg viewBox="0 0 50 100" width="0.5em" height="1em">' +
+      '<path d="M38 18V68H8M20 56L8 68L20 80" fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+      "</svg>";
     return span;
   }
   ignoreEvent() {

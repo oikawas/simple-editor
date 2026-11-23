@@ -71,13 +71,8 @@ struct NoteTextView {
             let font = parent.font
             if !force, case let (applied, height)? = appliedStyle, applied == font, height == parent.lineHeight { return }
             appliedStyle = (font, parent.lineHeight)
-            #if os(macOS)
-            let natural = NSLayoutManager().defaultLineHeight(for: font)
-            #else
-            let natural = font.lineHeight
-            #endif
-            let style = NSMutableParagraphStyle()
-            style.lineSpacing = max(0, font.pointSize * parent.lineHeight - natural)
+            let style = paragraphStyle(for: font)
+            bodyParagraph = style
             isApplying = true
             defer { isApplying = false }
             #if os(macOS)
@@ -100,6 +95,27 @@ struct NoteTextView {
             #endif
         }
 
+        /// The paragraph style that gives every line the same height: the font
+        /// size times the line height, but not less than the font's natural
+        /// line height. Without a fixed height, a line holding Japanese (set
+        /// in a fallback font with taller metrics) would be taller than an
+        /// empty line or one of Latin letters.
+        private func paragraphStyle(for font: PlatformFont) -> NSParagraphStyle {
+            #if os(macOS)
+            let natural = NSLayoutManager().defaultLineHeight(for: font)
+            #else
+            let natural = font.lineHeight
+            #endif
+            let height = max(font.pointSize * parent.lineHeight, natural).rounded()
+            let style = NSMutableParagraphStyle()
+            style.minimumLineHeight = height
+            style.maximumLineHeight = height
+            return style
+        }
+
+        /// The paragraph style of the body text.
+        private var bodyParagraph = NSParagraphStyle()
+
         #if os(macOS)
         private var titleFont: NSFont {
             let font = parent.font
@@ -121,9 +137,12 @@ struct NoteTextView {
             isApplying = true
             defer { isApplying = wasApplying }
             storage.beginEditing()
-            storage.addAttribute(.font, value: parent.font, range: reset)
+            storage.addAttributes([.font: parent.font, .paragraphStyle: bodyParagraph], range: reset)
             if hasTitle, titleEnd > 0 {
                 storage.addAttribute(.font, value: titleFont, range: NSRange(location: 0, length: titleEnd))
+                // The title's line is as much taller as its type.
+                let paragraph = NSRange(location: 0, length: min(text.length, titleEnd + 1))
+                storage.addAttribute(.paragraphStyle, value: paragraphStyle(for: titleFont), range: paragraph)
             }
             storage.endEditing()
             styledTitleEnd = titleEnd
@@ -135,6 +154,7 @@ struct NoteTextView {
             guard let textView, !composing else { return }
             let inTitle = parent.note.diaryDate == nil && textView.selectedRange().location <= styledTitleEnd
             textView.typingAttributes[.font] = inTitle ? titleFont : parent.font
+            textView.typingAttributes[.paragraphStyle] = inTitle ? paragraphStyle(for: titleFont) : bodyParagraph
         }
 
         /// Marks where the searched words appear. The marks are drawn over the

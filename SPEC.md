@@ -150,8 +150,9 @@ There are two kinds of client:
 - Display in the settings changes how the text looks, per device. It is not stored on the server and does not affect other devices. Changes apply at once
 - Web app: the text's font size (12 to 28, 15 by default) and line height (1.2 to 2.4, 1.6 by default), kept in the browser's localStorage
 - Native apps: the text's typeface (any installed font), size, and line height (1.0 to 3.0, 1.2 by default). "Reset" returns to the system default
-- The line height is the height of a line as a multiple of the font size
+- The line height is the height of a line as a multiple of the font size. Every line gets this fixed height (font size times line height), whether empty, Japanese, or Latin: Japanese is set in a fallback font, and leaving the height to each font would make lines differ. The title line is taller in proportion to its size
 - In every app: **ruled lines** (none, solid, dashed, or dotted; none by default), and whether **full-width spaces** and **half-width spaces** are shown as dotted boxes and **line breaks** as a symbol (↵) (each on or off; off by default)
+  - The line break symbol is an arrow drawn with lines, as wide as one half-width character (the same shape in every app)
   - A faint, thin rule (0.5 points) is drawn on the text's baseline in every row on screen, wrapped rows included, and on the empty last line too
   - Finding the baseline: the web app computes it in CSS from a value measured once with the editor's font (`--baseline-shift`), macOS and iOS take it from the glyph positions of each row, and Linux lays out each row's text with Pango (GTK does not report baselines)
   - The rules and marks are only drawn and are not part of the text: copying, saving, syncing, and exporting are unchanged

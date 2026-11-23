@@ -516,7 +516,17 @@ impl App {
     pub fn apply_font(&self) {
         let settings = self.settings();
         let font = &settings.font;
-        let mut rules = vec![format!("line-height: {:.1};", settings.line_height())];
+        // A length, not a factor: a factor multiplies each font's own height,
+        // so a line of Japanese (a fallback font with other metrics) would
+        // be taller or shorter than an empty line or one of Latin letters.
+        let mut rules = vec![format!("line-height: {:.2}em;", settings.line_height())];
+        // The title line (1.2 times as large) gets the extra height above it.
+        let desc = crate::settings_dialog::current_font(&settings);
+        let size = desc.size() as f64 / gtk::pango::SCALE as f64;
+        let px = if desc.is_size_absolute() { size } else { size * 96.0 / 72.0 };
+        if let Some(tag) = self.ui.buffer.tag_table().lookup("title") {
+            tag.set_pixels_above_lines((px * 0.2 * settings.line_height()).round() as i32);
+        }
         if !font.is_empty() {
             let desc = gtk::pango::FontDescription::from_string(font);
             if let Some(family) = desc.family() {

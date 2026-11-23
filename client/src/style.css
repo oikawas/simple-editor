@@ -205,6 +205,8 @@ body.mode-diary #tag-filter { display: none; }
 :root[data-half-width-spaces] #editor .cm-half-space { outline: 1px dotted var(--faint); outline-offset: -1px; }
 #editor .cm-line-break { display: none; color: var(--faint); pointer-events: none; user-select: none; }
 :root[data-line-breaks] #editor .cm-line-break { display: inline; }
+/* The arrow's box is 1em tall with the baseline 0.8em down. */
+#editor .cm-line-break svg { vertical-align: -0.2em; }
 
 /* The build number, small at the bottom left. */
 .build-info { padding: 4px 14px calc(6px + env(safe-area-inset-bottom)); font-size: 10.5px; color: var(--faint); }

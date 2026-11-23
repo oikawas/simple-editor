@@ -601,7 +601,8 @@ function describeError(e: unknown): string {
     return `失敗が続いたため、一時的に受け付けを停止しています。${Math.ceil(e.retryAfter / 60)} 分ほど待ってから試してください。`;
   }
   if (e instanceof ApiError) return `サーバーでエラーが発生しました (${e.status})。`;
-  return "サーバーに接続できません。URL とネットワークを確認してください。";
+  // The browser does not say whether a certificate was the cause.
+  return "サーバーに接続できません。URL とネットワークを確認してください。HTTPS の場合は、この端末でサーバーのルート証明書を信頼しているかも確認してください（サーバーの URL をブラウザで開くと、証明書の警告が出るかどうかで分かります）。";
 }
 
 async function renderDevices(): Promise<void> {

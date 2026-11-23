@@ -228,6 +228,7 @@ There are two kinds of client:
 - Reconnects back off from 1 to 30 seconds, doubling each time. When a connection that had worked drops, the count starts again from 1 second. When the app sets a retry interval (`ClientConfig.retry_interval_secs`), a connection that had worked is retried once after 1 second when it drops, and failing attempts are then repeated at that interval. A refused device token stops reconnecting; hitting the attempt limit waits 60 seconds
 - SQLite on the device keeps each note's Yjs state, the notes with unsent changes, and the last fetched list. Notes with unsent changes are reopened on startup and sent once connected
 - TLS is verified with the operating system's certificate store (rustls-platform-verifier), so the local CA's root certificate installed on the device is honored
+- When the server's certificate cannot be verified, the error is `Certificate`, apart from other connection failures (`Network`). The apps say that the server's certificate could not be verified and ask to check that this device has the root certificate installed and trusted. The web app cannot tell the cause from the browser, so its message for a failed connection also suggests checking the certificate
 - Each app stores the device token in the OS's secure storage (the Keychain and the like) and hands it to the core on startup
 - Tests run the real server and check sync between Rust clients, interoperation with a JavaScript client built on the web app's libraries, offline edits being sent later, and device revocation
 

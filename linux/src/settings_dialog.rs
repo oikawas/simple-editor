@@ -19,6 +19,9 @@ fn describe(e: &CoreError, registering: bool) -> String {
         CoreError::Network { message } => {
             format!("サーバーに接続できません。URL とネットワークを確認してください。\n（{message}）")
         }
+        CoreError::Certificate { message } => format!(
+            "サーバーの証明書を確認できません。この端末でサーバーのルート証明書（http://<サーバー>/ca.crt）を入れて信頼しているか確認してください（Ubuntu などでは /usr/local/share/ca-certificates/ に置いて sudo update-ca-certificates）。\n（{message}）"
+        ),
         other => format!("エラー: {other}"),
     }
 }

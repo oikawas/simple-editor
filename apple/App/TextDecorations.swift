@@ -1,10 +1,10 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
-private typealias PlatformColor = NSColor
+typealias PlatformColor = NSColor
 #else
 import UIKit
-private typealias PlatformColor = UIColor
+typealias PlatformColor = UIColor
 #endif
 
 /// The style of the rule drawn under every line of the text.
@@ -50,7 +50,17 @@ struct TextDecorations: Equatable {
 /// Draws the ruled lines and the marks for spaces and line breaks behind the
 /// text. They are only drawn, so they are not part of the text: copying,
 /// saving, and syncing see the text alone.
-final class DecoratingLayoutManager: NSLayoutManager {
+final class DecoratingLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
+    override init() {
+        super.init()
+        delegate = self
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        delegate = self
+    }
+
     var decorations = TextDecorations() {
         didSet {
             guard decorations != oldValue, let length = textStorage?.length else { return }
@@ -82,7 +92,79 @@ final class DecoratingLayoutManager: NSLayoutManager {
         #endif
     }
 
+    // MARK: The text's band in each line
+
+    /// The part of a line the text takes: the font's height, centered in the
+    /// line. Lines have a fixed height (see NoteTextView's paragraph style);
+    /// the caret and the selection cover this band, not the whole line.
+    static func textBand(ofLine line: CGRect, font: PlatformFont) -> CGRect {
+        let height = font.ascender - font.descender
+        return CGRect(x: line.minX, y: line.minY + ((line.height - height) / 2).rounded(), width: line.width, height: height)
+    }
+
+    /// The font a line is set in: that of its first character.
+    func lineFont(atCharacter index: Int) -> PlatformFont {
+        guard let storage = textStorage, storage.length > 0 else { return typingFont }
+        return storage.attribute(.font, at: min(index, storage.length - 1), effectiveRange: nil) as? PlatformFont ?? typingFont
+    }
+
+    /// Centers the text in its line and records its band as the used rect.
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<CGRect>,
+        lineFragmentUsedRect: UnsafeMutablePointer<CGRect>,
+        baselineOffset: UnsafeMutablePointer<CGFloat>,
+        in textContainer: NSTextContainer,
+        forGlyphRange glyphRange: NSRange
+    ) -> Bool {
+        let font = lineFont(atCharacter: characterIndexForGlyph(at: glyphRange.location))
+        let line = lineFragmentRect.pointee
+        let band = Self.textBand(ofLine: line, font: font)
+        baselineOffset.pointee = band.minY - line.minY + font.ascender
+        let used = lineFragmentUsedRect.pointee
+        lineFragmentUsedRect.pointee = CGRect(x: used.minX, y: band.minY, width: used.width, height: band.height)
+        return true
+    }
+
+    override func setExtraLineFragmentRect(_ fragmentRect: CGRect, usedRect: CGRect, textContainer container: NSTextContainer) {
+        let band = Self.textBand(ofLine: fragmentRect, font: typingFont)
+        super.setExtraLineFragmentRect(fragmentRect, usedRect: CGRect(x: usedRect.minX, y: band.minY, width: usedRect.width, height: band.height), textContainer: container)
+    }
+
+    /// The origin of the drawing under way, for fillBackgroundRectArray.
+    private var drawingOrigin = CGPoint.zero
+
+    /// The selection (and other backgrounds) covers only the text's band of
+    /// each line it spans.
+    override func fillBackgroundRectArray(_ rectArray: UnsafePointer<CGRect>, count rectCount: Int, forCharacterRange charRange: NSRange, color: PlatformColor) {
+        var bands: [CGRect] = []
+        for i in 0..<rectCount {
+            let rect = rectArray[i]
+            let local = rect.offsetBy(dx: -drawingOrigin.x, dy: -drawingOrigin.y)
+            guard let container = textContainers.first else { continue }
+            let glyphs = glyphRange(forBoundingRect: local, in: container)
+            var found = false
+            enumerateLineFragments(forGlyphRange: glyphs) { line, used, _, _, _ in
+                guard line.maxY > local.minY + 0.5, line.minY < local.maxY - 0.5 else { return }
+                bands.append(CGRect(x: rect.minX, y: used.minY + self.drawingOrigin.y, width: rect.width, height: used.height))
+                found = true
+            }
+            if !found, !extraLineFragmentRect.isEmpty, extraLineFragmentRect.intersects(local) {
+                let used = extraLineFragmentUsedRect
+                bands.append(CGRect(x: rect.minX, y: used.minY + drawingOrigin.y, width: rect.width, height: used.height))
+                found = true
+            }
+            if !found { bands.append(rect) }
+        }
+        bands.withUnsafeBufferPointer { buffer in
+            super.fillBackgroundRectArray(buffer.baseAddress!, count: buffer.count, forCharacterRange: charRange, color: color)
+        }
+    }
+
+    // MARK: Drawing
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
+        drawingOrigin = origin
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let context else { return }
         context.saveGState()
@@ -104,32 +186,16 @@ final class DecoratingLayoutManager: NSLayoutManager {
             context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: y))
             context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: y))
         }
-        let text = (textStorage?.string ?? "") as NSString
-        enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, range, _ in
-            rule(at: self.baseline(of: rect, firstGlyph: range.location, in: text), across: rect, padding: container.lineFragmentPadding)
+        enumerateLineFragments(forGlyphRange: glyphs) { rect, used, container, range, _ in
+            let font = self.lineFont(atCharacter: self.characterIndexForGlyph(at: range.location))
+            rule(at: used.minY + font.ascender, across: rect, padding: container.lineFragmentPadding)
         }
         // The empty line after a final line break, set in the typing font.
         if NSMaxRange(glyphs) >= numberOfGlyphs, !extraLineFragmentRect.isEmpty {
             let rect = extraLineFragmentRect
-            // Lines have a fixed height with the text at the bottom, so the
-            // baseline is the font's descent above the line's bottom.
-            rule(at: rect.maxY + typingFont.descender, across: rect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
+            rule(at: extraLineFragmentUsedRect.minY + typingFont.ascender, across: rect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
         }
         context.strokePath()
-    }
-
-    /// Where the baseline of a line fragment is. A glyph's location is its
-    /// baseline point within the fragment, except for the line break that is
-    /// all an empty line holds, which reports the bottom. Lines have a fixed
-    /// height with the text at the bottom, so there the baseline is the
-    /// font's descent above the bottom.
-    private func baseline(of rect: CGRect, firstGlyph glyph: Int, in text: NSString) -> CGFloat {
-        let char = characterIndexForGlyph(at: glyph)
-        guard char < text.length, text.character(at: char) == 0x0A else {
-            return rect.minY + location(forGlyphAt: glyph).y
-        }
-        let font = textStorage?.attribute(.font, at: char, effectiveRange: nil) as? PlatformFont ?? typingFont
-        return rect.maxY + font.descender
     }
 
     /// The font of the end of the text, which an empty last line takes.
@@ -159,7 +225,10 @@ final class DecoratingLayoutManager: NSLayoutManager {
             let font = storage.attribute(.font, at: i, effectiveRange: nil) as? PlatformFont
                 ?? PlatformFont.systemFont(ofSize: PlatformFont.systemFontSize)
             let line = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            let baseline = origin.y + baseline(of: line, firstGlyph: glyphRange(forCharacterRange: NSRange(location: i, length: 1), actualCharacterRange: nil).location, in: text)
+            var lineStart = NSRange()
+            _ = lineFragmentRect(forGlyphAt: glyph, effectiveRange: &lineStart)
+            let baseline = origin.y + lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).minY
+                + lineFont(atCharacter: characterIndexForGlyph(at: lineStart.location)).ascender
             let box = boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
             let x = origin.x + box.minX
             if space {

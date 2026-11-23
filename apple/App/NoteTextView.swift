@@ -370,7 +370,7 @@ extension NoteTextView: UIViewRepresentable {
         let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
         layout.addTextContainer(container)
-        let textView = UITextView(frame: .zero, textContainer: container)
+        let textView = BandTextView(frame: .zero, textContainer: container)
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.textColor = .label
@@ -394,6 +394,62 @@ extension NoteTextView: UIViewRepresentable {
         context.coordinator.applyStyle()
         context.coordinator.applyExternalChange()
     }
+}
+
+/// A text view whose caret and selection cover the text's band of each line
+/// (the font's height, see DecoratingLayoutManager.textBand) instead of the
+/// whole line, which is taller with the line height.
+final class BandTextView: UITextView {
+    private var decorating: DecoratingLayoutManager? { layoutManager as? DecoratingLayoutManager }
+
+    /// The text's band of the line holding the character at `index`, in
+    /// this view's coordinates.
+    private func band(atCharacter index: Int) -> CGRect? {
+        guard let layout = decorating else { return nil }
+        let length = textStorage.length
+        let used: CGRect
+        if index >= length, !layout.extraLineFragmentRect.isEmpty {
+            used = layout.extraLineFragmentUsedRect
+        } else if length > 0 {
+            used = layout.lineFragmentUsedRect(forGlyphAt: layout.glyphIndexForCharacter(at: min(index, length - 1)), effectiveRange: nil)
+        } else {
+            return nil
+        }
+        return used.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
+    }
+
+    override func caretRect(for position: UITextPosition) -> CGRect {
+        let caret = super.caretRect(for: position)
+        guard let band = band(atCharacter: offset(from: beginningOfDocument, to: position)) else { return caret }
+        return CGRect(x: caret.minX, y: band.minY, width: caret.width, height: band.height)
+    }
+
+    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
+        super.selectionRects(for: range).map { rect in
+            guard let layout = decorating, let container = layout.textContainers.first, !rect.rect.isEmpty else { return rect }
+            let point = CGPoint(x: rect.rect.minX - textContainerInset.left, y: rect.rect.midY - textContainerInset.top)
+            let glyph = layout.glyphIndex(for: point, in: container)
+            guard let band = band(atCharacter: layout.characterIndexForGlyph(at: glyph)) else { return rect }
+            return BandSelectionRect(base: rect, rect: CGRect(x: rect.rect.minX, y: band.minY, width: rect.rect.width, height: band.height))
+        }
+    }
+}
+
+/// A selection rect moved to the text's band.
+private final class BandSelectionRect: UITextSelectionRect {
+    private let base: UITextSelectionRect
+    private let bandRect: CGRect
+
+    init(base: UITextSelectionRect, rect: CGRect) {
+        self.base = base
+        self.bandRect = rect
+    }
+
+    override var rect: CGRect { bandRect }
+    override var writingDirection: NSWritingDirection { base.writingDirection }
+    override var containsStart: Bool { base.containsStart }
+    override var containsEnd: Bool { base.containsEnd }
+    override var isVertical: Bool { base.isVertical }
 }
 
 extension NoteTextView.Coordinator: UITextViewDelegate {

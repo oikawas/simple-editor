@@ -60,7 +60,8 @@ There are two kinds of client:
 
 - The same note can be open and edited on several devices at once. Changes reach the other devices almost immediately
 - Whether edits happen at the same time or while offline, no device's changes are lost, and every device converges to the same content (automatic merging with a CRDT)
-- Other devices' cursors are shown with their configured device names
+- Other devices' cursors are shown with their configured device names (web app)
+- The names of the other devices showing the note right now appear as "editing" in the status area below the text (every app; section 3.15). Presence travels as Yjs awareness, for the note shown only (not for notes opened in the background to send changes)
 - Adding and removing tags merges the same way
 
 ### 3.6 Offline
@@ -182,6 +183,15 @@ There are two kinds of client:
   - The web app takes one per production build (`vite build`; the dev server shows "dev"), the Linux app on every build of it such as `cargo build` (`linux/build.rs`), and the macOS and iOS apps on every Xcode build (the "Build number" build phase writes `apple/Generated/BuildInfo.swift`)
   - The count is per checkout of the repository. A Docker build on the server takes the number after the host's `.build-number` if there is one, but does not advance the host's count
   - It is separate from the app version (`MARKETING_VERSION` and the like) and is not meant to identify releases
+
+### 3.15 Status area
+
+- A one-line status area below the text shows, for the open note (every app). The creation and update times moved here from above the text
+  - Length: the characters of the whole text without line breaks, counted as they appear (an emoji with modifiers, or a letter with combining marks, is one)
+  - Editing: the names of the other devices showing this note now (left out when there are none). Devices with the same name are shown once, and presence this device left behind (say, before the app restarted) is left out
+  - The creation and update times (for a diary entry, its date and the update time; a day not written has no update time)
+- The sync status stays with the list, as before
+- How presence works: the device name goes out as the awareness state `{"user":{"name":...}}` (the web app's shape). In the native apps the shared core sends and receives it; the app tells it the note shown with `Client.set_active_note` and gets the other devices' names through `ClientListener.on_editors_changed`. The server drops states not renewed within 30 seconds, so ours is sent again with each 25-second keepalive. Leaving the note (closing it, or opening another) sends a removal
 
 ## 4. Architecture
 

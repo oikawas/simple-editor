@@ -20,6 +20,14 @@ public final class OpenNote: Identifiable {
     public private(set) var deleted = false
     public private(set) var createdAt: Date = .distantPast
     public private(set) var updatedAt: Date = .distantPast
+    /// Other devices editing this note now (their names).
+    public internal(set) var editors: [String] = []
+
+    /// The length as people count it: characters as they appear, without
+    /// line breaks.
+    public var characterCount: Int {
+        text.reduce(0) { $1 == "\n" || $1 == "\r\n" ? $0 : $0 + 1 }
+    }
 
     init(note: Note) {
         self.id = note.id()

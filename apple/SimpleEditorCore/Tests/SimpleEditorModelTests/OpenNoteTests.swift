@@ -13,6 +13,12 @@ final class OpenNoteTests: XCTestCase {
         return OpenNote(note: try client.createNote())
     }
 
+    func testCharacterCountLeavesOutLineBreaks() throws {
+        let note = try makeNote()
+        note.applyEdit(from: "", to: "abc\nあいう\n👍🏽 e\u{301}\r\nx")
+        XCTAssertEqual(note.characterCount, 10)
+    }
+
     func testEditWithoutRemoteChanges() throws {
         let note = try makeNote()
         note.applyEdit(from: "", to: "日本語の入力")
@@ -60,4 +66,5 @@ final class NoopListener: ClientListener, @unchecked Sendable {
     func onStatus(status: SyncStatus) {}
     func onNotesChanged() {}
     func onNoteChanged(id: String) {}
+    func onEditorsChanged(id: String, names: [String]) {}
 }

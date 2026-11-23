@@ -63,16 +63,24 @@ struct NoteListView: View {
                 }
             }
             ToolbarItem {
+                #if os(macOS)
+                // Exporting everything is in the File menu (SimpleEditorApp).
+                Button("設定と端末", systemImage: "gearshape") { showSettings = true }
+                    .help("設定と端末")
+                    .disabled(model.phase != .ready)
+                #else
                 Menu("その他", systemImage: "ellipsis.circle") {
                     Button("設定と端末", systemImage: "gearshape") { showSettings = true }
                     Button("すべて書き出し (.zip)", systemImage: "square.and.arrow.up") { exportAll() }
-                    #if os(iOS)
                     Button("ポメラから取り込み", systemImage: "qrcode.viewfinder") { importingFromPomera = true }
-                    #endif
                 }
                 .disabled(model.phase != .ready)
+                #endif
             }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .exportAllRequested)) { _ in exportAll() }
+        #endif
         .refreshable { await model.refreshByUser() }
         #if os(iOS)
         .fullScreenCover(isPresented: $importingFromPomera) {
@@ -108,6 +116,11 @@ struct NoteListView: View {
             }
         }
     }
+}
+
+extension Notification.Name {
+    /// File > Export All, on macOS; the note list does the export.
+    static let exportAllRequested = Notification.Name("SimpleEditor.exportAllRequested")
 }
 
 private struct NoteRow: View {

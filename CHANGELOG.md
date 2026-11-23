@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The macOS app's text view now uses TextKit 1, like the iOS app, to draw the ruled lines and marks
+- In the macOS app's list toolbar, the settings button now stands on its own instead of being in the "その他" (More) menu. Exporting everything moved to File > "すべて書き出し (.zip)…" (⇧⌘E) in the menu bar and is no longer in the window
 
 ## [0.3.0] - 2026-11-22
 

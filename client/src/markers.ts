@@ -88,3 +88,19 @@ const lineBreakMarks = ViewPlugin.fromClass(
 );
 
 export const markers = [spaceMarks, lineBreakMarks];
+
+// Where the baseline sits in a line, for the ruled lines' CSS. In a line of
+// height L, the baseline is L/2 + (ascent - descent)/2 below the top; the
+// second part depends only on the font, so it is measured once, in ems, and
+// kept in --baseline-shift. The probe is a zero-height box on the baseline.
+export function measureBaseline(within: HTMLElement): void {
+  const line = document.createElement("div");
+  line.style.cssText = "position:absolute;visibility:hidden;font-size:100px;line-height:100px;white-space:nowrap";
+  const probe = document.createElement("span");
+  probe.style.cssText = "display:inline-block;width:1px;height:0;vertical-align:baseline";
+  line.append("Ag", probe);
+  within.append(line);
+  const shift = (probe.offsetTop - 50) / 100;
+  line.remove();
+  if (Number.isFinite(shift)) document.documentElement.style.setProperty("--baseline-shift", shift.toFixed(3));
+}

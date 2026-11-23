@@ -89,7 +89,7 @@ fn draw(view: &MarkedTextView, snapshot: &gtk::Snapshot, d: Decorations) {
 
     if d.ruled_lines != RuledLines::None {
         cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 0.22);
-        cr.set_line_width(1.0);
+        cr.set_line_width(0.5);
         cr.set_dash(
             match d.ruled_lines {
                 RuledLines::Dashed => &[6.0, 4.0],
@@ -98,25 +98,41 @@ fn draw(view: &MarkedTextView, snapshot: &gtk::Snapshot, d: Decorations) {
             },
             0.0,
         );
-        // A rule at the bottom of every display line, wrapped rows included:
-        // a row ends where the next one starts.
+        // GTK does not say where a row's baseline is. Line height spreads its
+        // extra space evenly above and below, so the baseline sits where it
+        // would in the row's text laid out on its own, centered in the row.
+        // The row's own text matters: Japanese comes from a fallback font
+        // with other metrics. The title line is set bold and 1.2 times as large.
+        let title = view.buffer().tag_table().lookup("title");
+        let title_attrs = gtk::pango::AttrList::new();
+        title_attrs.insert(gtk::pango::AttrFloat::new_scale(1.2));
+        title_attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
+        // A rule on the baseline of every display line, wrapped rows included.
         let mut it = row;
         loop {
+            let r = view.iter_location(&it);
+            // An empty line is its own display line end; moving on from it
+            // would take the next line's text.
+            let mut row_end = it;
+            if !it.ends_line() && !view.forward_display_line_end(&mut row_end) {
+                row_end = view.buffer().end_iter();
+            }
+            let text = it.visible_text(&row_end);
+            let text = text.split('\n').next().unwrap_or_default();
+            let layout = view.create_pango_layout(Some(if text.trim().is_empty() { "Ag" } else { text }));
+            if title.as_ref().is_some_and(|t| it.has_tag(t)) {
+                layout.set_attributes(Some(&title_attrs));
+            }
+            let (_, height) = layout.pixel_size();
+            let baseline = layout.baseline() as f64 / gtk::pango::SCALE as f64;
+            let y = r.y() as f64 + (r.height() - height) as f64 / 2.0 + baseline;
+            cr.move_to(left, y);
+            cr.line_to(right, y);
             let mut next = it;
             // This returns false on reaching the end of the text, though it
             // moved there (onto the empty line after a final line break).
             view.forward_display_line(&mut next);
-            let advanced = next != it;
-            let row_bottom = if advanced {
-                view.iter_location(&next).y()
-            } else {
-                let (y, height) = view.line_yrange(&it);
-                y + height
-            };
-            let y = row_bottom as f64 - 0.5;
-            cr.move_to(left, y);
-            cr.line_to(right, y);
-            if !advanced || row_bottom >= bottom {
+            if next == it || r.y() + r.height() >= bottom {
                 break;
             }
             it = next;

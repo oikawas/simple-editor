@@ -5,7 +5,7 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { loadCursor, saveCursor } from "./cursors";
-import { markers } from "./markers";
+import { markers, measureBaseline } from "./markers";
 import {
   diaryDate,
   diaryId,
@@ -913,6 +913,7 @@ $<HTMLInputElement>("import-file").onchange = async () => {
 };
 
 applyDisplay(loadDisplay());
+measureBaseline($("editor"));
 $("build-info").textContent = `build ${__BUILD_NUMBER__}`;
 renderList();
 connect();

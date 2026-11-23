@@ -91,24 +91,34 @@ final class DecoratingLayoutManager: NSLayoutManager {
         if decorations.marksAnything { drawMarks(glyphsToShow, at: origin, in: context) }
     }
 
-    /// A rule at the bottom of every line fragment, so wrapped rows get one each.
+    /// A rule on the baseline of every line fragment, so wrapped rows get one each.
     private func drawRules(_ glyphs: NSRange, at origin: CGPoint, in context: CGContext) {
         context.setStrokeColor(Self.ruleColor.cgColor)
-        context.setLineWidth(1)
+        context.setLineWidth(0.5)
         context.setLineDash(phase: 0, lengths: decorations.ruledLines.dashes)
-        func rule(under rect: CGRect, padding: CGFloat) {
-            let y = origin.y + rect.maxY - 0.5
-            context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: y))
-            context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: y))
+        func rule(at y: CGFloat, across rect: CGRect, padding: CGFloat) {
+            context.move(to: CGPoint(x: origin.x + rect.minX + padding, y: origin.y + y))
+            context.addLine(to: CGPoint(x: origin.x + rect.maxX - padding, y: origin.y + y))
         }
-        enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, _, _ in
-            rule(under: rect, padding: container.lineFragmentPadding)
+        enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, range, _ in
+            // A glyph's location is its baseline point within the fragment.
+            rule(at: rect.minY + self.location(forGlyphAt: range.location).y, across: rect, padding: container.lineFragmentPadding)
         }
-        // The empty line after a final line break.
+        // The empty line after a final line break, set in the typing font.
         if NSMaxRange(glyphs) >= numberOfGlyphs, !extraLineFragmentRect.isEmpty {
-            rule(under: extraLineFragmentRect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
+            let rect = extraLineFragmentRect
+            let font = typingFont
+            rule(at: rect.minY + font.ascender, across: rect, padding: extraLineFragmentTextContainer?.lineFragmentPadding ?? 0)
         }
         context.strokePath()
+    }
+
+    /// The font of the end of the text, which an empty last line takes.
+    private var typingFont: PlatformFont {
+        guard let storage = textStorage, storage.length > 0,
+              let font = storage.attribute(.font, at: storage.length - 1, effectiveRange: nil) as? PlatformFont
+        else { return PlatformFont.systemFont(ofSize: PlatformFont.systemFontSize) }
+        return font
     }
 
     /// Dotted boxes on spaces and an arrow at each line break.

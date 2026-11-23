@@ -152,7 +152,8 @@ There are two kinds of client:
 - Native apps: the text's typeface (any installed font), size, and line height (1.0 to 3.0, 1.2 by default). "Reset" returns to the system default
 - The line height is the height of a line as a multiple of the font size
 - In every app: **ruled lines** (none, solid, dashed, or dotted; none by default), and whether **full-width spaces** and **half-width spaces** are shown as dotted boxes and **line breaks** as a symbol (↵) (each on or off; off by default)
-  - A faint rule is drawn at the bottom of every row on screen, wrapped rows included, and under the empty last line too
+  - A faint, thin rule (0.5 points) is drawn on the text's baseline in every row on screen, wrapped rows included, and on the empty last line too
+  - Finding the baseline: the web app computes it in CSS from a value measured once with the editor's font (`--baseline-shift`), macOS and iOS take it from the glyph positions of each row, and Linux lays out each row's text with Pango (GTK does not report baselines)
   - The rules and marks are only drawn and are not part of the text: copying, saving, syncing, and exporting are unchanged
   - The web app draws them with CSS (a gradient repeating every `1lh` of each line) and CodeMirror decorations, macOS and iOS in the background drawing of a TextKit 1 `NSLayoutManager`, and Linux in GtkTextView's `snapshot_layer` (the layer below the text)
 

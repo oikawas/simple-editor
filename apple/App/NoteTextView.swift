@@ -46,10 +46,10 @@ struct NoteTextView {
         var isApplying = false
         /// The font and line height last applied to the text.
         private var appliedStyle: (PlatformFont, Double)?
-        #if os(macOS)
         /// Where the first line ended when it was last styled, so restyling
         /// only touches the top of the text.
         private var styledTitleEnd = 0
+        #if os(macOS)
         /// The search last highlighted.
         private var appliedHighlight: String?
         #endif
@@ -88,10 +88,12 @@ struct NoteTextView {
             }
             textView.typingAttributes[.font] = font
             textView.typingAttributes[.paragraphStyle] = style
-            #if os(macOS)
             styledTitleEnd = storage?.length ?? 0
             styleTitle()
+            #if os(macOS)
             highlightSearch(force: true)
+            #else
+            (textView as? BandTextView)?.setHeader(parent.note.diaryDate.map(Diary.format), font: titleFont)
             #endif
         }
 
@@ -116,11 +118,15 @@ struct NoteTextView {
         /// The paragraph style of the body text.
         private var bodyParagraph = NSParagraphStyle()
 
-        #if os(macOS)
-        private var titleFont: NSFont {
+        private var titleFont: PlatformFont {
             let font = parent.font
+            #if os(macOS)
             let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
             return NSFont(descriptor: bold.fontDescriptor, size: font.pointSize * Self.titleScale) ?? bold
+            #else
+            let descriptor = font.fontDescriptor.withSymbolicTraits(.traitBold) ?? font.fontDescriptor
+            return UIFont(descriptor: descriptor, size: font.pointSize * Self.titleScale)
+            #endif
         }
 
         /// How much larger the title (the first line) is set than the text.
@@ -130,7 +136,11 @@ struct NoteTextView {
         /// as the web and Linux apps do; not in diary entries. Only attributes
         /// change, so this waits while composing.
         func styleTitle() {
+            #if os(macOS)
             guard let textView, let storage = textView.textStorage, !composing else { return }
+            #else
+            guard let storage = textView?.textStorage, !composing else { return }
+            #endif
             let text = storage.string as NSString
             let newline = text.range(of: "\n")
             let titleEnd = newline.location == NSNotFound ? text.length : newline.location
@@ -155,11 +165,17 @@ struct NoteTextView {
         /// What is typed next takes the title's font on the first line.
         func updateTypingFont() {
             guard let textView, !composing else { return }
-            let inTitle = parent.note.diaryDate == nil && textView.selectedRange().location <= styledTitleEnd
+            #if os(macOS)
+            let caret = textView.selectedRange().location
+            #else
+            let caret = textView.selectedRange.location
+            #endif
+            let inTitle = parent.note.diaryDate == nil && caret <= styledTitleEnd
             textView.typingAttributes[.font] = inTitle ? titleFont : parent.font
             textView.typingAttributes[.paragraphStyle] = inTitle ? paragraphStyle(for: titleFont) : bodyParagraph
         }
 
+        #if os(macOS)
         /// Marks where the searched words appear. The marks are drawn over the
         /// text and are not part of it.
         func highlightSearch(force: Bool = false) {
@@ -204,10 +220,10 @@ struct NoteTextView {
             defer { isApplying = false }
             #if os(macOS)
             textView.setSelectedRange(range)
-            updateTypingFont()
             #else
             textView.selectedRange = range
             #endif
+            updateTypingFont()
         }
 
         /// Brings the cursor into view.
@@ -254,8 +270,8 @@ struct NoteTextView {
             parent.onEdit()
             // Changes from elsewhere were merged in: show the result.
             if parent.note.text != edited { show(parent.note.text, selection: parent.note.selection) }
-            #if os(macOS)
             styleTitle()
+            #if os(macOS)
             highlightSearch(force: true)
             #endif
         }
@@ -263,9 +279,7 @@ struct NoteTextView {
         func selectionChanged(_ range: NSRange) {
             guard !isApplying, !composing, range.location != NSNotFound else { return }
             parent.note.selection = range.location..<(range.location + range.length)
-            #if os(macOS)
             updateTypingFont()
-            #endif
         }
 
         /// Shows a change from another device, unless the user is composing.
@@ -378,7 +392,7 @@ extension NoteTextView: UIViewRepresentable {
         textView.backgroundColor = .clear
         textView.textColor = .label
         textView.font = font
-        textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 24, right: 8)
+        textView.textContainerInset = UIEdgeInsets(top: BandTextView.topInset, left: 8, bottom: 24, right: 8)
         textView.smartQuotesType = .no
         textView.smartDashesType = .no
         textView.alwaysBounceVertical = true
@@ -404,6 +418,43 @@ extension NoteTextView: UIViewRepresentable {
 /// whole line, which is taller with the line height.
 final class BandTextView: UITextView {
     private var decorating: DecoratingLayoutManager? { layoutManager as? DecoratingLayoutManager }
+
+    /// A line above the text that is not part of it and cannot be edited:
+    /// the date of a diary entry. It scrolls with the text.
+    private var header: UILabel?
+    /// The space above the text without a header.
+    static let topInset: CGFloat = 8
+
+    func setHeader(_ text: String?, font: UIFont) {
+        if let text {
+            let label = header ?? UILabel()
+            if header == nil {
+                label.textColor = .secondaryLabel
+                label.isUserInteractionEnabled = false
+                label.accessibilityTraits = .header
+                addSubview(label)
+                header = label
+            }
+            label.text = text
+            label.font = font
+            label.sizeToFit()
+            textContainerInset.top = Self.topInset * 2 + label.bounds.height
+        } else {
+            header?.removeFromSuperview()
+            header = nil
+            textContainerInset.top = Self.topInset
+        }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let header else { return }
+        let left = textContainerInset.left + textContainer.lineFragmentPadding
+        header.frame = CGRect(x: left, y: Self.topInset,
+                              width: max(0, bounds.width - left - textContainerInset.right - textContainer.lineFragmentPadding),
+                              height: header.bounds.height)
+    }
 
     /// The text's band of the line holding the character at `index`, in
     /// this view's coordinates.

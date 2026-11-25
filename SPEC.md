@@ -44,7 +44,7 @@ There are two kinds of client:
 - Pressing Backspace in the empty field removes the last tag
 - Tags are trimmed, inner whitespace is replaced with `-`, and they are cut to 64 characters
 - All tags are shown above the list; selecting one shows only notes with that tag. A note created while a tag is selected starts with that tag
-- In the notes tab, the list can be narrowed further below the tags. These apply together with the tag and the search (not in the diary tab, nor to diary entries found by a search)
+- In the notes tab, the list can be narrowed further below the tags (not in the iOS app, which keeps its list short: it shows neither, and clears excluded tags chosen earlier at launch). These apply together with the tag and the search (not in the diary tab, nor to diary entries found by a search)
   - **Creation year and month**: choose "すべての年" (any year) or a year with memos, and "すべての月" (any month) or a month from 1 to 12, separately. A year alone or a month alone works too (a month alone means that month of any year). Creation times are read in the device's time zone. Notes without a creation time are hidden once a year or month is chosen. Not kept: a new launch starts from any year and month
   - **Excluded tags**: notes with any of the chosen tags (one or more) are hidden. Tags are added from "＋ タグ" and removed with "#tag ×". Kept per device (not sent to the server). Not applied in the trash
 
@@ -182,7 +182,7 @@ There are two kinds of client:
 
 ### 3.14 Build number
 
-- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42"
+- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42". The iOS app shows it with the sync status at the top left of the list (in the navigation bar)
 - It goes up by one with every build of the web, Linux, macOS, or iOS app. `scripts/next-build-number.sh` keeps the count in `.build-number` at the top of the repository (not under version control). Builds running at the same time never get the same number
   - The web app takes one per production build (`vite build`; the dev server shows "dev"), the Linux app on every build of it such as `cargo build` (`linux/build.rs`), and the macOS and iOS apps on every Xcode build (the "Build number" build phase writes `apple/Generated/BuildInfo.swift`)
   - The count is per checkout of the repository. A Docker build on the server takes the number after the host's `.build-number` if there is one, but does not advance the host's count
@@ -285,12 +285,14 @@ There are two kinds of client:
 - The list's toolbar: on macOS, a settings (gear) button of its own, with exporting everything in the File menu of the menu bar; on iOS, a "その他" (More) menu with the settings, exporting everything, and importing from a pomera
 - Display in the settings sets the editor's typeface (any installed font, or the system font), size, and line height (applied as the paragraph style's line spacing), kept per device in UserDefaults and applied at once
 - In the list, searched words are highlighted in titles and excerpts (section 3.7)
-- In the macOS app, the first line (the title) is shown bold and 1.5 times as large (as in the web and Linux apps; not in diary entries; the iOS app shows it at the text's size). While searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
+- In the macOS and iOS apps, the first line (the title) is shown bold and 1.5 times as large (as in the web and Linux apps; not in diary entries).
+- The iOS app's editor shows no note name or diary date at the top (in the navigation bar). For a note, its first line serves as the name. A diary entry shows its date (e.g. 2026年11月25日（水）) above the text, as large as a title. That line is not part of the text, cannot be edited, and scrolls with the text
+- In the macOS app, while searching, the searched words are marked in the text, and a note opened from the results scrolls to the first match. The marks are drawn over the text and are not part of it
 - The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). Both use TextKit 1, with an `NSLayoutManager` that draws the ruled lines and the marks for spaces and line breaks (section 3.12). On iOS, TextKit 2 could also put the caret on the last line when blank space in a run of empty lines was tapped, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL, device name, the last cursor position of each note, the note last open, and the excluded tags in UserDefaults; notes in the app's data (Application Support)
-- While the server cannot be reached, attempts are repeated every 15 minutes (the first one after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status below the list while offline, reconnects at once
+- While the server cannot be reached, attempts are repeated every 15 minutes (the first one after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status (below the list on macOS, at the top left of the list on iOS) while offline, reconnects at once
 - When the network comes back (the OS network path (`NWPathMonitor`) goes from unusable to usable, or a usable path moves to other interfaces, such as Wi-Fi to cellular), the app reconnects at once instead of waiting for the next retry. A usable path does not mean the server can be reached (outside the LAN, say); then retries go on at the usual intervals
 - The app also reconnects at once when it returns to the foreground after 20 seconds or more in the background, or while it is not online (while suspended it cannot send keepalives, so the server may have closed the connection). Neither happens when the device token was refused or the attempt limit was hit
 - Both apps ask for access to the local network (`NSLocalNetworkUsageDescription`). The macOS app is sandboxed and may only make network connections and write files the user chooses

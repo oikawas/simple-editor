@@ -34,8 +34,12 @@ struct EditorView: View {
             )
             statusBar
         }
+        #if os(macOS)
         .navigationTitle(note.diaryDate.map(Diary.format) ?? (note.title.isEmpty ? "（無題）" : note.title))
-        #if os(iOS)
+        #else
+        // The iPhone shows no title above the text: a note's first line is
+        // its title, set large, and a diary entry shows its date above the text.
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {

@@ -14,8 +14,10 @@ See [SPEC.md](SPEC.md) for the full specification and design principles, and [CH
 
 ## Features
 
-- **Tags** — add several tags to a note and filter the list by tag
-- **Safe concurrent editing from several devices** — edits sync through Yjs. Whether you edit the same note on several devices at once or while offline, changes are merged without losing any of them
+- **Tags** — add several tags to a note and filter the list by tag. The notes list can also be narrowed by creation year and month, and by tags to leave out (one or more, kept per device), except in the iOS app
+- **Safe concurrent editing from several devices** — edits sync through Yjs. Whether you edit the same note on several devices at once or while offline, changes are merged without losing any of them. Below the text, the names of other devices with the note open are shown (except in the iOS app)
+- **Pick up where you left off** — at launch, the note last open on the device opens again, and each note opens where its cursor was last left on that device
+- **Display settings** — per device, choose the text's size, typeface, and line height, ruled lines (solid, dashed, or dotted), and marks for full-width and half-width spaces and line breaks. The first line of a note (its title) is shown large and bold
 - **Creation dates are kept** — the creation time is recorded in the note, and the server never overwrites the first value it stored with a later one (it can be moved earlier, for example to the date imported text carries)
 - **Full-text search** — search note bodies and tags. Whitespace-separated terms must all match (AND), case is ignored, and Japanese matches by substring without word segmentation
 - **Edit history** — list past versions, compare them with the current text, and restore any of them. The content from before a restore stays in the history
@@ -173,6 +175,7 @@ Choose the scheme **SimpleEditor-macOS** and the destination **My Mac** at the t
 ### Other notes
 
 - The device token is kept in the Keychain. Notes are also kept in the app's data, so they can be read and edited offline
+- The iPhone app keeps its screens simple. The sync status and build number sit at the top left of the list, and the notes list has no creation year, month, or excluded tags. The editor shows no note name above the text (the first line is the title), a diary entry shows its date above the text, and below the text only the sync status and update time are shown
 - While the server cannot be reached, the app reconnects every 15 minutes (the first try after a drop comes after 1 second). It reconnects at once when the network comes back, when the app returns to the foreground, when you pull the list to refresh, or when you tap the offline status
 - "ポメラから取り込み" (Import from pomera) in the iOS app asks for camera access the first time. If you declined, turn on Settings → Simple Editor → Camera
 - The UI-independent part (`SimpleEditorModel` in `apple/SimpleEditorCore`) can be tested with `swift test` on a Mac or on Linux. With `SIMPLE_EDITOR_TEST_SERVER` (server URL) and `SIMPLE_EDITOR_TEST_TOKEN` (registration token) set, it drives two devices against a real server. On Linux, run `./apple/generate-bindings.sh` first
@@ -224,7 +227,7 @@ npm test                                             # server integration tests
 npm run build -w server && (cd core && cargo test)   # core tests (they start the real server)
 ```
 
-Every build raises the build number shown at the bottom left of the app by one. The count is kept in `.build-number` at the top of the repository (not under version control).
+Every build raises the build number shown at the bottom left of the app (at the top left of the list in the iPhone app) by one. The count is kept in `.build-number` at the top of the repository (not under version control).
 
 See [SPEC.md](SPEC.md) for design details such as the data model and sync flow.
 

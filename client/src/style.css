@@ -117,6 +117,20 @@ button.primary:hover { filter: brightness(1.06); background: var(--accent); }
 }
 #tag-filter .chip:hover { background: var(--fill); color: var(--fg); }
 #tag-filter .chip.active { background: var(--fill-strong); color: var(--fg); font-weight: 600; }
+#list-filter {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 0 12px 8px;
+  font-size: 12px; color: var(--muted);
+}
+#list-filter .filter-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+#list-filter select {
+  font-size: 12px; padding: 2px 4px; border: 0; border-radius: 6px; background: var(--fill); color: var(--muted);
+  max-width: 9em;
+}
+#list-filter select.active { background: var(--fill-strong); color: var(--fg); font-weight: 600; }
+#list-filter .chip.excluded { background: var(--fill-strong); color: var(--fg); padding: 2px 2px 2px 8px; }
+#list-filter .chip.excluded button { padding: 0 4px; border-radius: 999px; color: var(--muted); line-height: 1; }
+#list-filter .chip.excluded button:hover { background: var(--fill); color: var(--fg); }
+#list-filter .filter-none { color: var(--faint); }
 
 #note-list {
   list-style: none; margin: 0; padding: 2px 8px calc(12px + env(safe-area-inset-bottom));
@@ -138,7 +152,7 @@ button.primary:hover { filter: brightness(1.06); background: var(--accent); }
 /* ---- calendar ---- */
 #calendar { display: none; padding: 2px 12px 10px; }
 body.mode-diary #calendar { display: block; }
-body.mode-diary #tag-filter { display: none; }
+body.mode-diary #tag-filter, body.mode-diary #list-filter { display: none; }
 .cal-head { display: flex; align-items: center; gap: 2px; padding: 0 0 6px 4px; }
 .cal-head .cal-title { flex: 1; font-weight: 600; font-size: 15px; letter-spacing: 0.01em; }
 .cal-head .icon-button { min-width: 28px; height: 28px; }

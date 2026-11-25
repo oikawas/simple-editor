@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- iOS app: the sync status and build number moved to the top left of the list. The status area below the text shows the sync status at the left and only the update time at the right. The notes list has no creation year, month, or excluded tags. The editor no longer shows the note name or date at the top: a note's first line (its title) is bold and 1.5 times as large, and a diary entry shows its date above the text (not part of the text, and not editable)
 - The title (the first line) is now 1.5 times as large as the text, up from 1.2 (web, Linux, macOS)
 - The status area is right-aligned
 - In the native apps (Linux, macOS, iOS), every line now has the same fixed height (font size times line height). Lines of Japanese (set in a fallback font) used to differ in height from empty lines and lines of Latin letters

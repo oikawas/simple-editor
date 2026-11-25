@@ -24,6 +24,11 @@ struct SimpleEditorApp: App {
             ContentView()
                 .environment(model)
                 .task {
+                    #if os(iOS)
+                    // The iPhone has no year, month, or excluded tags to
+                    // narrow the list, so none chosen earlier may hide notes.
+                    model.excludedTags = []
+                    #endif
                     model.start()
                     network.start { model.reconnectNow() }
                 }

@@ -3,6 +3,7 @@
 
 use crate::config::{self, Settings};
 use crate::cursors::Cursors;
+use crate::list_filter::{created_years, without_excluded, CreatedFilter};
 use crate::marked_view::{Decorations, MarkedTextView};
 use crate::calendar::DiaryCalendar;
 use crate::{history, settings_dialog};
@@ -73,6 +74,8 @@ struct State {
     editors: HashMap<String, Vec<String>>,
     /// Whether the note open when the app was last used has been reopened.
     reopened_last_note: bool,
+    /// Notes created in a year and/or month; not kept.
+    created: CreatedFilter,
 }
 
 pub struct Ui {
@@ -87,6 +90,8 @@ pub struct Ui {
     new_button: gtk::Button,
     tag_scroll: gtk::ScrolledWindow,
     tag_bar: gtk::Box,
+    /// The creation year and month, and the tags to leave out.
+    list_filter: gtk::Box,
     calendar: DiaryCalendar,
     list: gtk::ListBox,
     empty: adw::StatusPage,
@@ -152,6 +157,7 @@ pub fn build(app: &adw::Application) -> Rc<App> {
             search: None,
             editors: HashMap::new(),
             reopened_last_note: false,
+            created: CreatedFilter::default(),
         }),
         refresh_pending: Cell::new(None),
         search_pending: Cell::new(None),
@@ -226,6 +232,11 @@ fn build_ui(app: &adw::Application) -> Ui {
     side_box.append(&tabs);
     side_box.append(&search);
     side_box.append(&tag_scroll);
+    let list_filter = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    list_filter.set_margin_start(8);
+    list_filter.set_margin_end(8);
+    list_filter.set_margin_bottom(6);
+    side_box.append(&list_filter);
     side_box.append(calendar.widget());
     side_box.append(&list_scroll);
     // The build number (build.rs), small at the bottom left.
@@ -351,6 +362,7 @@ fn build_ui(app: &adw::Application) -> Ui {
         new_button,
         tag_scroll,
         tag_bar,
+        list_filter,
         calendar,
         list,
         empty,
@@ -853,6 +865,16 @@ impl App {
                 Filter::Tag(t) => n.tags.contains(t),
                 _ => true,
             })
+            // The year, month, and excluded tags narrow the notes tab only, and
+            // leave diary entries found by a search alone. The trash ignores
+            // excluded tags.
+            .filter(|n| {
+                if st.mode != Mode::Notes || diary_date(n.id.clone()).is_some() {
+                    return true;
+                }
+                st.created.matches(n.created_at)
+                    && (filter == Filter::Trash || without_excluded(&n.tags, &st.settings.excluded_tags))
+            })
             .filter_map(|n| {
                 if terms.is_empty() {
                     return Some((n.clone(), None));
@@ -972,6 +994,7 @@ impl App {
         self.ui.diary_tab.set_active(diary);
         self.ui.status_title.set_title(if diary { "日記" } else { "メモ" });
         self.ui.tag_scroll.set_visible(!diary);
+        self.ui.list_filter.set_visible(!diary);
         self.ui.calendar.widget().set_visible(diary);
         self.ui.new_button.set_icon_name(if diary { "x-office-calendar-symbolic" } else { "list-add-symbolic" });
         self.ui.new_button.set_tooltip_text(Some(if diary { "今日の日記" } else { "新規ノート" }));
@@ -1026,6 +1049,133 @@ impl App {
             });
             self.ui.tag_bar.append(&button);
         }
+        self.render_list_filter();
+    }
+
+    /// The creation year and month, and the tags whose notes are left out.
+    fn render_list_filter(self: &Rc<Self>) {
+        while let Some(child) = self.ui.list_filter.first_child() {
+            self.ui.list_filter.remove(&child);
+        }
+        let (created, mut years, tags, excluded) = {
+            let st = self.state.borrow();
+            let memos: Vec<&NoteSummary> = st.notes.iter().filter(|n| diary_date(n.id.clone()).is_none()).collect();
+            let mut tags: Vec<String> = memos.iter().filter(|n| !n.deleted).flat_map(|n| n.tags.clone()).collect();
+            tags.sort();
+            tags.dedup();
+            let years = created_years(memos.iter().map(|n| n.created_at));
+            (st.created, years, tags, st.settings.excluded_tags.clone())
+        };
+        // The chosen year stays listed, in order, even with no memo left in it.
+        if let Some(year) = created.year.filter(|y| !years.contains(y)) {
+            years.push(year);
+            years.sort_unstable_by(|a, b| b.cmp(a));
+        }
+
+        let caption = |text: &str| {
+            let label = gtk::Label::new(Some(text));
+            label.add_css_class("dim-label");
+            label.add_css_class("caption");
+            label
+        };
+        // A dropdown whose first entry means "any"; `choose` gets the index
+        // of the chosen entry, 0 for "any". It runs once the dropdown's own
+        // signal is over, since the list is rebuilt.
+        let dropdown = |labels: Vec<String>, selected: usize, choose: Box<dyn Fn(&Rc<App>, u32)>| {
+            let strings: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let d = gtk::DropDown::from_strings(&strings);
+            d.set_selected(selected as u32);
+            if selected > 0 {
+                d.add_css_class("accent");
+            }
+            let weak = Rc::downgrade(self);
+            let choose = Rc::new(choose);
+            d.connect_selected_notify(move |d| {
+                let (weak, choose, index) = (weak.clone(), choose.clone(), d.selected());
+                glib::idle_add_local_once(move || {
+                    if let Some(app) = weak.upgrade() {
+                        choose(&app, index);
+                    }
+                });
+            });
+            d
+        };
+
+        let created_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        created_row.append(&caption("作成"));
+        let year_labels = std::iter::once("すべての年".to_owned()).chain(years.iter().map(|y| format!("{y}年"))).collect();
+        let year_index = created.year.and_then(|y| years.iter().position(|v| *v == y)).map_or(0, |i| i + 1);
+        let year_values = years.clone();
+        created_row.append(&dropdown(
+            year_labels,
+            year_index,
+            Box::new(move |app, i| {
+                app.state.borrow_mut().created.year = (i > 0).then(|| year_values[i as usize - 1]);
+                app.render_list();
+            }),
+        ));
+        let month_labels = std::iter::once("すべての月".to_owned()).chain((1..=12).map(|m| format!("{m}月"))).collect();
+        created_row.append(&dropdown(
+            month_labels,
+            created.month.map_or(0, |m| m as usize),
+            Box::new(|app, i| {
+                app.state.borrow_mut().created.month = (i > 0).then_some(i);
+                app.render_list();
+            }),
+        ));
+        self.ui.list_filter.append(&created_row);
+
+        let excluded_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        excluded_row.append(&caption("除外"));
+        for tag in &excluded {
+            let chip = gtk::Button::builder()
+                .label(format!("#{tag}  ✕"))
+                .tooltip_text(format!("#{tag} の除外をやめる"))
+                .build();
+            chip.add_css_class("chip");
+            chip.add_css_class("accent");
+            let (weak, tag) = (Rc::downgrade(self), tag.clone());
+            chip.connect_clicked(move |_| {
+                if let Some(app) = weak.upgrade() {
+                    app.set_excluded_tags(|tags| tags.retain(|t| *t != tag));
+                }
+            });
+            excluded_row.append(&chip);
+        }
+        let candidates: Vec<String> = tags.into_iter().filter(|t| !excluded.contains(t)).collect();
+        if !candidates.is_empty() {
+            let labels = std::iter::once("＋ タグ".to_owned()).chain(candidates.iter().map(|t| format!("#{t}"))).collect();
+            excluded_row.append(&dropdown(
+                labels,
+                0,
+                Box::new(move |app, i| {
+                    if i > 0 {
+                        let tag = candidates[i as usize - 1].clone();
+                        app.set_excluded_tags(|tags| tags.push(tag));
+                    }
+                }),
+            ));
+        } else if excluded.is_empty() {
+            excluded_row.append(&caption("タグなし"));
+        }
+        let excluded_scroll = gtk::ScrolledWindow::builder()
+            .child(&excluded_row)
+            .vscrollbar_policy(gtk::PolicyType::Never)
+            .build();
+        self.ui.list_filter.append(&excluded_scroll);
+    }
+
+    /// Changes the tags whose notes are left out, keeps them, and shows the list.
+    fn set_excluded_tags(self: &Rc<Self>, change: impl FnOnce(&mut Vec<String>)) {
+        let settings = {
+            let mut st = self.state.borrow_mut();
+            change(&mut st.settings.excluded_tags);
+            st.settings.excluded_tags.sort();
+            st.settings.excluded_tags.dedup();
+            st.settings.clone()
+        };
+        settings.save();
+        self.render_list();
     }
 
     fn show_note_ui(&self, shown: bool) {

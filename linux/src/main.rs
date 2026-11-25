@@ -2,6 +2,7 @@ mod calendar;
 mod config;
 mod cursors;
 mod history;
+mod list_filter;
 mod marked_view;
 mod settings_dialog;
 mod window;

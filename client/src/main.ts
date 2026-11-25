@@ -6,6 +6,7 @@ import * as Y from "yjs";
 import { ApiError, listDevices, registerDevice, renameThisDevice, revokeDevice } from "./api";
 import { countCharacters } from "./count";
 import { loadCursor, saveCursor } from "./cursors";
+import { createdIn, createdYears, loadExcludedTags, saveExcludedTags, withoutExcluded, type CreatedFilter } from "./listFilter";
 import { markers, measureBaseline } from "./markers";
 import { bandSelection } from "./selection";
 import {
@@ -34,6 +35,9 @@ let sync: SyncClient | null = null;
 let notes = new Map<string, NoteSummary>(loadCache());
 let current: { note: OpenNote; view: EditorView; dispose: () => void } | null = null;
 let filterTag: string | null = null;
+// Notes created in a year or month, and tags whose notes are left out.
+let createdFilter: CreatedFilter = { year: null, month: null };
+let excludedTags: string[] = loadExcludedTags();
 
 // The sidebar shows either notes or the diary; the choice is kept per device.
 type Mode = "notes" | "diary";
@@ -188,9 +192,14 @@ function visibleNotes(): NoteSummary[] {
       .sort((a, b) => b.id.localeCompare(a.id));
   }
   const tag = mode === "notes" ? filterTag : null;
+  // The year, month, and excluded tags narrow the notes tab only, and leave
+  // diary entries found by a search alone. The trash ignores excluded tags.
+  const narrowed = (n: NoteSummary) =>
+    mode !== "notes" || isDiary(n) || (createdIn(n.createdAt, createdFilter) && (tag === TRASH || withoutExcluded(n, excludedTags)));
   return all
     .filter((n) => (isDiary(n) ? terms.length > 0 && tag !== TRASH && isWritten(n) : tag === TRASH ? n.deleted : !n.deleted))
     .filter((n) => !tag || tag === TRASH || n.tags.includes(tag))
+    .filter(narrowed)
     .filter((n) => terms.length === 0 || hits?.has(n.id) || matchesLocally(n, terms))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -314,6 +323,67 @@ function renderTagFilter(): void {
     ...[...tags].sort().map((t) => chip(`#${t}`, t)),
     chip("ゴミ箱", TRASH),
   );
+  renderListFilter(tags);
+}
+
+// The creation year and month, and the tags to leave out.
+function renderListFilter(tags: Set<string>): void {
+  const memos = [...notes.values()].filter((n) => !isDiary(n));
+  const select = (label: string, value: number | null, options: [number, string][], onChange: (v: number | null) => void) => {
+    const s = document.createElement("select");
+    s.setAttribute("aria-label", label);
+    s.className = value === null ? "" : "active";
+    s.append(new Option(label, ""), ...options.map(([v, text]) => new Option(text, String(v), false, v === value)));
+    s.onchange = () => {
+      onChange(s.value === "" ? null : Number(s.value));
+      renderList();
+    };
+    return s;
+  };
+  const years = createdYears(memos);
+  // The chosen year stays listed, in order, even with no memo left in it.
+  if (createdFilter.year !== null && !years.includes(createdFilter.year)) {
+    years.push(createdFilter.year);
+    years.sort((a, b) => b - a);
+  }
+  const created = document.createElement("span");
+  created.className = "filter-group";
+  created.append(
+    "作成",
+    select("すべての年", createdFilter.year, years.map((y) => [y, `${y}年`]), (v) => (createdFilter = { ...createdFilter, year: v })),
+    select("すべての月", createdFilter.month, Array.from({ length: 12 }, (_, i) => [i + 1, `${i + 1}月`]), (v) => (createdFilter = { ...createdFilter, month: v })),
+  );
+
+  const setExcluded = (next: string[]) => {
+    excludedTags = [...new Set(next)].sort();
+    saveExcludedTags(excludedTags);
+    renderList();
+  };
+  const excluded = document.createElement("span");
+  excluded.className = "filter-group";
+  excluded.append("除外");
+  for (const t of excludedTags) {
+    const chip = document.createElement("span");
+    chip.className = "chip excluded";
+    const remove = document.createElement("button");
+    remove.textContent = "×";
+    remove.title = `#${t} の除外をやめる`;
+    remove.setAttribute("aria-label", remove.title);
+    remove.onclick = () => setExcluded(excludedTags.filter((x) => x !== t));
+    chip.append(`#${t}`, remove);
+    excluded.append(chip);
+  }
+  const candidates = [...tags].filter((t) => !excludedTags.includes(t)).sort();
+  if (candidates.length > 0) {
+    const add = document.createElement("select");
+    add.setAttribute("aria-label", "除外するタグ");
+    add.append(new Option("＋ タグ", ""), ...candidates.map((t) => new Option(`#${t}`, t)));
+    add.onchange = () => add.value && setExcluded([...excludedTags, add.value]);
+    excluded.append(add);
+  } else if (excludedTags.length === 0) {
+    excluded.append(Object.assign(document.createElement("span"), { className: "filter-none", textContent: "タグなし" }));
+  }
+  $("list-filter").replaceChildren(created, excluded);
 }
 
 function formatDate(ms: number, withSeconds = false): string {

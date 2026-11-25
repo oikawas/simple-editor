@@ -53,6 +53,12 @@ public final class AppModel {
     public private(set) var notes: [NoteSummary] = []
     public private(set) var current: OpenNote?
     public var filter: NoteFilter = .all
+    /// Notes created in a year and/or month; not kept.
+    public var createdFilter = CreatedFilter()
+    /// Tags whose notes are left out of the notes tab; kept per device.
+    public var excludedTags: [String] = [] {
+        didSet { defaults.set(excludedTags, forKey: Self.excludedTagsKey) }
+    }
     /// Notes or the diary; kept per device.
     public var mode: SidebarMode = .notes {
         didSet { defaults.set(mode.rawValue, forKey: Self.modeKey) }
@@ -79,6 +85,7 @@ public final class AppModel {
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var reopenedLastNote = false
     private static let modeKey = "sidebarMode"
+    static let excludedTagsKey = "simple-editor.excludedTags"
     /// The note open on this device when the app was last used, reopened at launch.
     static let lastNoteKey = "simple-editor.lastNote"
     /// Seconds between reconnection attempts while the server stays out of
@@ -95,6 +102,7 @@ public final class AppModel {
         if settings.deviceName.isEmpty { settings.deviceName = defaultDeviceName }
         self.settings = settings
         self.mode = defaults.string(forKey: Self.modeKey).flatMap(SidebarMode.init) ?? .notes
+        self.excludedTags = defaults.stringArray(forKey: Self.excludedTagsKey) ?? []
     }
 
     /// Connects with the stored token, or asks for registration.
@@ -270,6 +278,14 @@ public final class AppModel {
                 return filter == .trash ? note.deleted : !note.deleted
             }
             .filter { if case .tag(let t) = filter { return $0.tags.contains(t) } else { return true } }
+            // The year, month, and excluded tags narrow the notes tab only, and
+            // leave diary entries found by a search alone. The trash ignores
+            // excluded tags.
+            .filter { note in
+                guard mode == .notes, Diary.date(ofNote: note.id) == nil else { return true }
+                guard createdFilter.matches(createdAt: note.createdAt) else { return false }
+                return filter == .trash || !note.tags.contains(where: excludedTags.contains)
+            }
             .compactMap { note in
                 if terms.isEmpty { return ListedNote(summary: note, snippet: nil) }
                 let snippet = searchHits?[note.id]
@@ -281,6 +297,23 @@ public final class AppModel {
     }
 
     /// Tags on notes outside the trash.
+    /// The years memos were created in, newest first, with the chosen year
+    /// kept even when no memo is left in it.
+    public var createdYears: [Int] {
+        let years = CreatedFilter.years(of: notes.filter { Diary.date(ofNote: $0.id) == nil }.map(\.createdAt))
+        guard let year = createdFilter.year, !years.contains(year) else { return years }
+        return (years + [year]).sorted(by: >)
+    }
+
+    public func exclude(tag: String) {
+        guard !excludedTags.contains(tag) else { return }
+        excludedTags = (excludedTags + [tag]).sorted()
+    }
+
+    public func include(tag: String) {
+        excludedTags.removeAll { $0 == tag }
+    }
+
     public var allTags: [String] {
         Array(Set(notes.filter { !$0.deleted && Diary.date(ofNote: $0.id) == nil }.flatMap(\.tags))).sorted()
     }

@@ -24,6 +24,50 @@ final class ServerTests: XCTestCase {
         return AppModel(tokens: MemoryTokenStore(), defaults: defaults, dataDirectory: dir, defaultDeviceName: name)
     }
 
+    func testNarrowsTheNotesByCreationAndExcludedTags() async throws {
+        let defaults = UserDefaults(suiteName: "se-test-\(UUID().uuidString)")!
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("se-model-\(UUID().uuidString)")
+        let a = AppModel(tokens: MemoryTokenStore(), defaults: defaults, dataDirectory: dir, defaultDeviceName: "Mac")
+        a.start()
+        try await a.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
+        try await until("online") { a.status == .online }
+        let work = try XCTUnwrap(a.createNote())
+        work.edit("仕事のメモ")
+        work.addTag("work")
+        a.currentNoteChanged()
+        let archived = try XCTUnwrap(a.createNote())
+        archived.edit("しまったメモ")
+        archived.addTag("work")
+        archived.addTag("archive")
+        a.currentNoteChanged()
+        a.mode = .notes
+        let ids = { Set(a.visibleNotes.map(\.id)) }
+        XCTAssertTrue(ids().isSuperset(of: [work.id, archived.id]))
+
+        a.exclude(tag: "archive")
+        XCTAssertTrue(ids().contains(work.id))
+        XCTAssertFalse(ids().contains(archived.id))
+        a.filter = .tag("work")
+        XCTAssertEqual(ids(), [work.id])
+        a.filter = .all
+
+        let year = Calendar.current.component(.year, from: Date())
+        XCTAssertEqual(a.createdYears.first, year)
+        a.createdFilter = CreatedFilter(year: year - 1)
+        XCTAssertFalse(ids().contains(work.id))
+        // The chosen year stays listed, in order, even with no memo in it.
+        XCTAssertEqual(Array(a.createdYears.prefix(2)), [year, year - 1])
+        a.createdFilter = CreatedFilter(year: year, month: Calendar.current.component(.month, from: Date()))
+        XCTAssertTrue(ids().contains(work.id))
+
+        // Excluded tags are kept on the device; the year and month are not.
+        let next = AppModel(tokens: MemoryTokenStore(), defaults: defaults, dataDirectory: dir, defaultDeviceName: "Mac")
+        XCTAssertEqual(next.excludedTags, ["archive"])
+        XCTAssertEqual(next.createdFilter, CreatedFilter())
+        a.include(tag: "archive")
+        XCTAssertTrue(ids().contains(archived.id))
+    }
+
     func testReopensTheLastNoteAtLaunch() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("se-model-\(UUID().uuidString)")
         let defaults = UserDefaults(suiteName: "se-test-\(UUID().uuidString)")!
@@ -114,7 +158,8 @@ final class ServerTests: XCTestCase {
         try await b.register(serverURL: server, deviceName: "", registrationToken: registrationToken)
         try await until("B online") { b.status == .online }
         try await until("B lists the note") { b.notes.contains { $0.id == note.id } }
-        XCTAssertEqual(b.allTags, ["swift"])
+        // Other tests on the same server add tags of their own.
+        XCTAssertTrue(b.allTags.contains("swift"))
         b.select(id: note.id)
         let onB = try XCTUnwrap(b.current)
         try await until("B has the text") { onB.text == "Swift のメモ\n本文 😀" }

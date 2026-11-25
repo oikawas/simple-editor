@@ -44,6 +44,9 @@ There are two kinds of client:
 - Pressing Backspace in the empty field removes the last tag
 - Tags are trimmed, inner whitespace is replaced with `-`, and they are cut to 64 characters
 - All tags are shown above the list; selecting one shows only notes with that tag. A note created while a tag is selected starts with that tag
+- In the notes tab, the list can be narrowed further below the tags. These apply together with the tag and the search (not in the diary tab, nor to diary entries found by a search)
+  - **Creation year and month**: choose "すべての年" (any year) or a year with memos, and "すべての月" (any month) or a month from 1 to 12, separately. A year alone or a month alone works too (a month alone means that month of any year). Creation times are read in the device's time zone. Notes without a creation time are hidden once a year or month is chosen. Not kept: a new launch starts from any year and month
+  - **Excluded tags**: notes with any of the chosen tags (one or more) are hidden. Tags are added from "＋ タグ" and removed with "#tag ×". Kept per device (not sent to the server). Not applied in the trash
 
 ### 3.3 Creation and update times
 
@@ -271,7 +274,7 @@ There are two kinds of client:
 - The settings register this device, rename it, list and revoke registered devices, and export everything. When this device is revoked, the stored token is deleted and registration is shown
 - The device token is stored with Secret Service (GNOME Keyring and the like); where that is unavailable, in a file in the config directory (mode 600)
 - The editor font is chosen with GTK's font chooser in the settings (typeface, weight, and size) and applied to the text with CSS, along with the line height
-- Settings live in `~/.config/simple-editor/settings.json`, the last cursor position of each note in `~/.config/simple-editor/cursors.json`, the ID of the note last open in `~/.config/simple-editor/last-note`, and notes in `~/.local/share/simple-editor`
+- Settings live in `~/.config/simple-editor/settings.json`, the last cursor position of each note in `~/.config/simple-editor/cursors.json`, the ID of the note last open in `~/.config/simple-editor/last-note`, the excluded tags in `excluded_tags` of `settings.json`, and notes in `~/.local/share/simple-editor`
 
 ### 4.6 macOS and iOS client (SwiftUI)
 
@@ -286,7 +289,7 @@ There are two kinds of client:
 - The text uses the platform's own text view (`NSTextView` on macOS, `UITextView` on iOS). Both use TextKit 1, with an `NSLayoutManager` that draws the ruled lines and the marks for spaces and line breaks (section 3.12). On iOS, TextKit 2 could also put the caret on the last line when blank space in a run of empty lines was tapped, because of its estimated line heights. SwiftUI's `TextEditor` cannot tell input-method composition from committed text, and redrawing it drops the input, so it is not used
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
-- The device token is kept in the Keychain; the server URL, device name, the last cursor position of each note, and the note last open in UserDefaults; notes in the app's data (Application Support)
+- The device token is kept in the Keychain; the server URL, device name, the last cursor position of each note, the note last open, and the excluded tags in UserDefaults; notes in the app's data (Application Support)
 - While the server cannot be reached, attempts are repeated every 15 minutes (the first one after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status below the list while offline, reconnects at once
 - When the network comes back (the OS network path (`NWPathMonitor`) goes from unusable to usable, or a usable path moves to other interfaces, such as Wi-Fi to cellular), the app reconnects at once instead of waiting for the next retry. A usable path does not mean the server can be reached (outside the LAN, say); then retries go on at the usual intervals
 - The app also reconnects at once when it returns to the foreground after 20 seconds or more in the background, or while it is not online (while suspended it cannot send keepalives, so the server may have closed the connection). Neither happens when the device token was refused or the attempt limit was hit
@@ -334,6 +337,7 @@ The journal mode is WAL.
 | localStorage `simple-editor:pending` | IDs of notes with unsent changes |
 | localStorage `simple-editor:cursors` | The last cursor position of each note (section 3.1) |
 | localStorage `simple-editor:last-note` | The note last open (section 3.1) |
+| localStorage `simple-editor:excluded-tags` | The excluded tags (section 3.2) |
 | localStorage `simple-editor:display` | Display settings (section 3.12) |
 
 ## 6. Sync flow

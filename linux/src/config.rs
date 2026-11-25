@@ -30,6 +30,9 @@ pub struct Settings {
     pub show_half_width_spaces: bool,
     #[serde(default)]
     pub show_line_breaks: bool,
+    /// Tags whose notes are left out of the notes tab.
+    #[serde(default)]
+    pub excluded_tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

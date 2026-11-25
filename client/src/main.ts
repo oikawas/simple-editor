@@ -341,7 +341,11 @@ function renderListFilter(tags: Set<string>): void {
     return s;
   };
   const years = createdYears(memos);
-  if (createdFilter.year !== null && !years.includes(createdFilter.year)) years.unshift(createdFilter.year);
+  // The chosen year stays listed, in order, even with no memo left in it.
+  if (createdFilter.year !== null && !years.includes(createdFilter.year)) {
+    years.push(createdFilter.year);
+    years.sort((a, b) => b - a);
+  }
   const created = document.createElement("span");
   created.className = "filter-group";
   created.append(

@@ -30,6 +30,7 @@ struct NoteListView: View {
                 .padding(.top, 4)
                 if model.mode == .notes {
                     TagFilterBar()
+                    ListFilterBar()
                 } else {
                     DiaryCalendarView()
                 }
@@ -199,6 +200,72 @@ private struct TagFilterBar: View {
             .buttonBorderShape(.capsule)
             .controlSize(.small)
             .tint(model.filter == value ? Color.accentColor : Color.secondary)
+    }
+}
+
+/// The creation year and month, and the tags whose notes are left out.
+private struct ListFilterBar: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("作成").font(.caption).foregroundStyle(.secondary)
+                Picker("作成年", selection: $model.createdFilter.year) {
+                    Text("すべての年").tag(Int?.none)
+                    ForEach(model.createdYears, id: \.self) { Text(verbatim: "\($0)年").tag(Int?.some($0)) }
+                }
+                Picker("作成月", selection: $model.createdFilter.month) {
+                    Text("すべての月").tag(Int?.none)
+                    ForEach(1...12, id: \.self) { Text(verbatim: "\($0)月").tag(Int?.some($0)) }
+                }
+                Spacer(minLength: 0)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    Text("除外").font(.caption).foregroundStyle(.secondary)
+                    ForEach(model.excludedTags, id: \.self) { tag in
+                        Button { model.include(tag: tag) } label: {
+                            Label("#\(tag)", systemImage: "xmark").labelStyle(TrailingIcon())
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .tint(Color.accentColor)
+                        .help("#\(tag) の除外をやめる")
+                        .accessibilityLabel("#\(tag) の除外をやめる")
+                    }
+                    let candidates = model.allTags.filter { !model.excludedTags.contains($0) }
+                    if !candidates.isEmpty {
+                        Menu("＋ タグ") {
+                            ForEach(candidates, id: \.self) { tag in
+                                Button("#\(tag)") { model.exclude(tag: tag) }
+                            }
+                        }
+                        .accessibilityLabel("除外するタグ")
+                        .fixedSize()
+                    } else if model.excludedTags.isEmpty {
+                        Text("タグなし").font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .controlSize(.small)
+        .padding(.horizontal)
+        .padding(.bottom, 6)
+        .background(.bar)
+    }
+
+    /// The title, then the icon: "#tag ×".
+    private struct TrailingIcon: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            HStack(spacing: 3) {
+                configuration.title
+                configuration.icon.imageScale(.small)
+            }
+        }
     }
 }
 

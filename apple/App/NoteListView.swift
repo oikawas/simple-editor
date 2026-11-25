@@ -310,14 +310,7 @@ private struct StatusBar: View {
         .accessibilityHint(model.status == .offline ? "タップすると今すぐ接続し直します" : "")
     }
 
-    private var shortText: String {
-        if case .needsRegistration = model.phase { return "未登録" }
-        switch model.status {
-        case .offline: return "オフライン"
-        case .rateLimited: return "一時停止中"
-        default: return text
-        }
-    }
+    private var shortText: String { model.syncShortText }
 
     private var fullBody: some View {
         // While offline, tapping tries to connect at once instead of waiting
@@ -344,9 +337,15 @@ private struct StatusBar: View {
         .background(.bar)
     }
 
-    private var text: String {
-        if case .needsRegistration = model.phase { return "未登録" }
-        switch model.status {
+    private var text: String { model.syncText }
+    private var color: Color { model.syncColor }
+}
+
+/// How the sync status is shown, in the list and below the text (iOS).
+extension AppModel {
+    var syncText: String {
+        if case .needsRegistration = phase { return "未登録" }
+        switch status {
         case .online: return "同期中"
         case .connecting: return "接続中…"
         case .offline: return "オフライン（変更はこの端末に保存され、接続後に送られます）"
@@ -355,8 +354,18 @@ private struct StatusBar: View {
         }
     }
 
-    private var color: Color {
-        switch model.status {
+    /// For narrow places: one short word or two.
+    var syncShortText: String {
+        if case .needsRegistration = phase { return "未登録" }
+        switch status {
+        case .offline: return "オフライン"
+        case .rateLimited: return "一時停止中"
+        default: return syncText
+        }
+    }
+
+    var syncColor: Color {
+        switch status {
         case .online: .green
         case .connecting, .offline: .orange
         case .unauthorized, .rateLimited: .red

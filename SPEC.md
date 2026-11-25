@@ -195,6 +195,7 @@ There are two kinds of client:
   - Editing: the names of the other devices showing this note now (left out when there are none). Devices with the same name are shown once, and presence this device left behind (say, before the app restarted) is left out
   - The creation and update times (for a diary entry, its date and the update time; a day not written has no update time)
 - The sync status stays with the list, as before
+- In the iOS app, the status area shows the sync status at the left (a colored dot and "同期中", "オフライン", and so on; tapping it while offline reconnects at once) and only the update time at the right (no length, editing devices, or creation time; a diary day not written yet shows no update time either)
 - How presence works: the device name goes out as the awareness state `{"user":{"name":...}}` (the web app's shape). In the native apps the shared core sends and receives it; the app tells it the note shown with `Client.set_active_note` and gets the other devices' names through `ClientListener.on_editors_changed`. The server drops states not renewed within 30 seconds, so ours is sent again with each 25-second keepalive. Leaving the note (closing it, or opening another) sends a removal
 
 ## 4. Architecture

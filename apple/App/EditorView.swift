@@ -74,9 +74,36 @@ struct EditorView: View {
     }
 
     /// Below the text: the length, other devices editing the note, and dates.
+    /// On the iPhone: the sync status at the left, the update time at the right.
     private var statusBar: some View {
         VStack(spacing: 0) {
             Divider()
+            #if os(iOS)
+            HStack(spacing: 8) {
+                // While offline, tapping tries to connect at once.
+                Button { model.retryIfOffline() } label: {
+                    HStack(spacing: 4) {
+                        Circle().fill(model.syncColor).frame(width: 7, height: 7)
+                        Text(model.syncShortText)
+                        if model.status == .offline { Image(systemName: "arrow.clockwise").imageScale(.small) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.syncText)
+                .accessibilityHint(model.status == .offline ? "タップすると今すぐ接続し直します" : "")
+                Spacer(minLength: 8)
+                // An entry not written yet has no update time.
+                if note.updatedAt.timeIntervalSince1970 > 0 {
+                    Text("更新: \(note.updatedAt.formatted(date: .numeric, time: .shortened))")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            #else
             Text(statusLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -86,6 +113,7 @@ struct EditorView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal)
                 .padding(.vertical, 6)
+            #endif
         }
         .background(.bar)
     }

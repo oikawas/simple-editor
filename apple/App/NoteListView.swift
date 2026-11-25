@@ -40,9 +40,7 @@ struct NoteListView: View {
             }
             .background(.bar)
         }
-        #if os(macOS)
         .safeAreaInset(edge: .bottom) { StatusBar() }
-        #endif
         .overlay {
             if model.mode == .diary, model.searchText.isEmpty, model.visibleNotes.isEmpty {
                 Text("この月の日記はまだありません。カレンダーの日付を選ぶと書けます")
@@ -59,10 +57,6 @@ struct NoteListView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            #if os(iOS)
-            // The sync status and the build number sit at the top left.
-            ToolbarItem(placement: .topBarLeading) { StatusBar(compact: true) }
-            #endif
             ToolbarItem(placement: .primaryAction) {
                 if model.mode == .diary {
                     Button("今日の日記", systemImage: "calendar") { model.openDiary(date: Diary.today) }
@@ -280,46 +274,8 @@ private struct ListFilterBar: View {
 
 private struct StatusBar: View {
     @Environment(AppModel.self) private var model
-    /// Small, for the navigation bar: short texts on one line each.
-    var compact = false
 
     var body: some View {
-        if compact { compactBody } else { fullBody }
-    }
-
-    private var compactBody: some View {
-        Button { model.retryIfOffline() } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                // Full contrast: the navigation bar's material washes out
-                // the secondary styles.
-                HStack(spacing: 4) {
-                    Circle().fill(color).frame(width: 7, height: 7)
-                    Text(shortText).font(.caption.weight(.semibold)).foregroundStyle(.primary)
-                    if model.status == .offline {
-                        Image(systemName: "arrow.clockwise").font(.caption2.weight(.semibold)).foregroundStyle(.primary)
-                    }
-                }
-                Text("build \(BuildInfo.number)").font(.caption2.weight(.medium)).foregroundStyle(.primary)
-            }
-            .lineLimit(1)
-            .fixedSize()
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(text)
-        .accessibilityHint(model.status == .offline ? "タップすると今すぐ接続し直します" : "")
-    }
-
-    private var shortText: String {
-        if case .needsRegistration = model.phase { return "未登録" }
-        switch model.status {
-        case .offline: return "オフライン"
-        case .rateLimited: return "一時停止中"
-        default: return text
-        }
-    }
-
-    private var fullBody: some View {
         // While offline, tapping tries to connect at once instead of waiting
         // for the next retry.
         Button { model.retryIfOffline() } label: {

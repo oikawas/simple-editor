@@ -182,7 +182,7 @@ There are two kinds of client:
 
 ### 3.14 Build number
 
-- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42"
+- The build number is shown small at the bottom left of the app (below the list), e.g. "build 42". The iOS app shows it with the sync status at the top left of the list (in the navigation bar)
 - It goes up by one with every build of the web, Linux, macOS, or iOS app. `scripts/next-build-number.sh` keeps the count in `.build-number` at the top of the repository (not under version control). Builds running at the same time never get the same number
   - The web app takes one per production build (`vite build`; the dev server shows "dev"), the Linux app on every build of it such as `cargo build` (`linux/build.rs`), and the macOS and iOS apps on every Xcode build (the "Build number" build phase writes `apple/Generated/BuildInfo.swift`)
   - The count is per checkout of the repository. A Docker build on the server takes the number after the host's `.build-number` if there is one, but does not advance the host's count
@@ -292,7 +292,7 @@ There are two kinds of client:
   - Composing text is not sent to the note; it is sent once committed. Changes from other devices that arrive while composing are held back from the view and merged on commit by locating the edited span with a diff, so neither change is lost
   - When a change from another device is applied, the cursor and selection are recomputed from a diff of the old and new text so they stay in place
 - The device token is kept in the Keychain; the server URL, device name, the last cursor position of each note, the note last open, and the excluded tags in UserDefaults; notes in the app's data (Application Support)
-- While the server cannot be reached, attempts are repeated every 15 minutes (the first one after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status below the list while offline, reconnects at once
+- While the server cannot be reached, attempts are repeated every 15 minutes (the first one after a drop comes after 1 second). Pulling the list to refresh, or tapping the sync status (below the list on macOS, at the top left of the list on iOS) while offline, reconnects at once
 - When the network comes back (the OS network path (`NWPathMonitor`) goes from unusable to usable, or a usable path moves to other interfaces, such as Wi-Fi to cellular), the app reconnects at once instead of waiting for the next retry. A usable path does not mean the server can be reached (outside the LAN, say); then retries go on at the usual intervals
 - The app also reconnects at once when it returns to the foreground after 20 seconds or more in the background, or while it is not online (while suspended it cannot send keepalives, so the server may have closed the connection). Neither happens when the device token was refused or the attempt limit was hit
 - Both apps ask for access to the local network (`NSLocalNetworkUsageDescription`). The macOS app is sandboxed and may only make network connections and write files the user chooses

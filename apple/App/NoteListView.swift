@@ -290,14 +290,16 @@ private struct StatusBar: View {
     private var compactBody: some View {
         Button { model.retryIfOffline() } label: {
             VStack(alignment: .leading, spacing: 0) {
+                // Full contrast: the navigation bar's material washes out
+                // the secondary styles.
                 HStack(spacing: 4) {
                     Circle().fill(color).frame(width: 7, height: 7)
-                    Text(shortText).font(.caption).foregroundStyle(.secondary)
+                    Text(shortText).font(.caption.weight(.semibold)).foregroundStyle(.primary)
                     if model.status == .offline {
-                        Image(systemName: "arrow.clockwise").font(.caption2).foregroundStyle(.secondary)
+                        Image(systemName: "arrow.clockwise").font(.caption2.weight(.semibold)).foregroundStyle(.primary)
                     }
                 }
-                Text("build \(BuildInfo.number)").font(.caption2).foregroundStyle(.tertiary)
+                Text("build \(BuildInfo.number)").font(.caption2.weight(.medium)).foregroundStyle(.primary)
             }
             .lineLimit(1)
             .fixedSize()
